@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>JobMatch | Find your next role</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f5f7;color:#172738;font:15px/1.6 system-ui,Arial,sans-serif}main{max-width:1320px;margin:36px auto;padding:0 24px}h1{font-size:32px;letter-spacing:-1px;margin:0}h2{font-size:21px;margin:0 0 14px}h3{font-size:21px;line-height:1.35;margin:10px 0}p{margin:8px 0 16px}.muted,.small{color:#637184}.small{font-size:12px}.grid{display:grid;grid-template-columns:350px minmax(0,1fr);gap:26px;margin-top:28px}.panel,.job{background:#fff;border:1px solid #dce3e9;border-radius:14px;padding:22px}.panel{align-self:start;position:sticky;top:20px}label{display:block;font-weight:600;margin:16px 0 6px}select,textarea,input{width:100%;font:inherit;border:1px solid #cbd5df;border-radius:7px;padding:10px;background:white}textarea{min-height:300px;font-size:12px;line-height:1.6;resize:vertical}button{font:inherit;cursor:pointer;border:0;border-radius:7px;padding:11px 16px;background:#176b53;color:#fff}button:disabled{opacity:.5;cursor:wait}#match{width:100%;margin-top:16px}.secondary{background:#e8efeb;color:#176b53;padding:8px 12px}.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.job{margin:16px 0}.score{display:inline-block;background:#e8f4ed;color:#176b53;border-radius:20px;padding:4px 11px;font-weight:650}.rank{color:#7c8996;font-size:13px}a{color:#176b53}details{margin:14px 0}summary{cursor:pointer;font-weight:600}blockquote{font-size:13px;border-left:3px solid #cbdcd4;background:#f5f8f6;padding:10px 12px;margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere}.empty{padding:64px 20px;text-align:center;border:1px dashed #becad3;border-radius:14px;color:#637184}.radar{display:block;width:min(100%,520px);margin:8px auto}.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid #e4e9ed;vertical-align:top}th{background:#f7f9fa;color:#566677;font-size:11px;text-transform:uppercase;letter-spacing:.4px}.level{white-space:nowrap;font-weight:650}.gap{color:#a66b16}.legend{font-size:12px;color:#637184}ul{padding-left:22px}.error{color:#a22d30}#status{font-size:13px;color:#6a7886;margin-top:6px}#notice{margin:12px 0 20px}@media(max-width:850px){.grid{grid-template-columns:1fr}.panel{position:static}textarea{min-height:200px}main{padding:0 16px}}
+.grid>section{min-width:0}.job{min-width:0;overflow-wrap:anywhere}.tablewrap{min-width:0}.tablewrap table{min-width:620px}.tablewrap th:first-child{width:140px}.tablewrap th:nth-child(2){width:125px}input[hidden]{display:none}
+.retrieval{background:#fff;border:1px solid #dce3e9;border-radius:10px;padding:12px 16px}
+.retrieval ol{padding-left:24px}.retrieval li+li{margin-top:12px}
+.why{background:#f5f8f6;border:1px solid #dce9e1;border-radius:10px;padding:14px 16px;margin:12px 0 18px}
+.why h4{font-size:16px;margin:0 0 6px}.why blockquote{background:#fff}.why p:last-child{margin-bottom:0}
+.analysis-panel{background:white;border:1px solid #dce3e9;border-radius:12px;padding:16px;margin:14px 0}
+.dimensions{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px}
+.dimension{background:#f3f6f5;padding:10px 12px;border-radius:8px}.dimension strong{display:block}
+</style></head><body><main>
+<h1>JobMatch <span style="font-weight:400;color:#778491">/ Find your next role</span></h1><div id="status">Loading job index…</div>
+<div class="grid"><section class="panel"><h2 id="input-title">Your resume</h2>
+<label for="sample">Resume library</label><select id="sample"><option value="">Select a resume</option></select>
+<label for="choosefile">Upload Markdown or text</label><input id="file" type="file" accept=".md,.txt,text/plain,text/markdown" hidden><button id="choosefile" class="secondary" type="button">Choose file</button><span id="filename" class="small"> No file selected</span>
+<label id="text-label" for="resume">Experience, projects and skills</label><textarea id="resume" placeholder="Paste your resume here…"></textarea>
+<label for="count">Recommendations</label><select id="count"><option value="5" selected>Top 5 jobs</option><option value="3">Top 3 jobs</option><option value="1">Top 1 job</option></select>
+<button id="match">Find matching jobs</button><p class="small" style="margin-top:12px">Search runs locally. The model analyzes selected resume excerpts and the full job descriptions on the shortlist.</p>
+</section><section><div class="toolbar"><h2 style="margin:0;flex:1">Your matches</h2><button id="latest" class="secondary">Load last report</button><button id="download" class="secondary" hidden>Download JSON</button></div>
+<div id="notice" class="muted">Job-specific requirements, evidence-backed capability comparisons, and clear gaps.</div><div id="results" class="empty">Select or upload a resume to find the five most relevant historical jobs.</div></section></div>
+</main><script>
+const $=id=>document.getElementById(id);let report=null;
+function node(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
+async function api(url,options){const r=await fetch(url,options);const data=await r.json();if(!r.ok)throw Error(data.error||'Request failed.');return data;}
+function list(parent,title,values){if(!values.length)return;parent.append(node('h4',title));const ul=node('ul');for(const value of values)ul.append(node('li',value));parent.append(ul);}
+async function loadOptions(){const choices=await api('/api/resumes');const sample=$('sample');if(!choices.length){sample.options[0].textContent='No local resumes';sample.disabled=true;}for(const item of choices){const o=node('option',item.id+' · '+item.title);o.value=item.id;sample.append(o);}return choices.length;}
+function screeningText(screen){
+  const labels=[screen.role_family?.replaceAll('_',' '),screen.seniority];
+  if(screen.min_years!==null)labels.push('JD minimum: '+screen.min_years+' yr');
+  if(screen.experience_status==='gap')labels.push('Reported experience below JD minimum');
+  if(screen.experience_status==='candidate_years_unknown')labels.push('Resume years unconfirmed');
+  if(screen.seniority_review)labels.push('Seniority to verify');
+  return labels.filter(Boolean).join(' · ');
+}
+function dimensionGrid(items){
+  const grid=node('div',undefined,'dimensions');
+  for(const [label,value] of items){
+    const cell=node('div',undefined,'dimension');
+    cell.append(node('div',label,'small'),node('strong',value));
+    grid.append(cell);
+  }
+  return grid;
+}
+function profilePanel(profile){
+  const panel=node('section',undefined,'analysis-panel');
+  panel.append(node('h3','Candidate profile'),dimensionGrid([
+    ['Role · seniority',[profile.role_family?.replaceAll('_',' '),profile.seniority].filter(Boolean).join(' · ')||'Unconfirmed'],
+    ['Dated work experience',profile.professional_experience_months==null?'Unconfirmed':profile.professional_experience_months+' months'],
+    ['Dated internships',profile.internship_experience_months==null?'Unconfirmed':profile.internship_experience_months+' months'],
+    ['Education listed',profile.education_level||'Unconfirmed']
+  ]));
+  const quotes=[profile.role_evidence, profile.experience_evidence,
+    ...(profile.experience_timeline_evidence?.professional||[]),...(profile.experience_timeline_evidence?.internship||[]),profile.education_evidence].filter(Boolean);
+  if(quotes.length){
+    const detail=node('details');
+    detail.append(node('summary','Resume profile evidence'));
+    for(const quote of quotes)detail.append(node('blockquote',quote));
+    panel.append(detail);
+  }
+  return panel;
+}
+function matchDimensions(job){
+  const screen=job.screening;
+  if(!screen)return node('div');
+  const role={match:'Aligned',adjacent:'Related',different:'Different direction',unknown:'Unconfirmed'};
+  const years={reported_years_meet_minimum:'Documented duration meets minimum',candidate_years_unknown:'Resume years unconfirmed',
+    requirement_unknown:'JD minimum unconfirmed',gap:'Documented duration below minimum'};
+  const level=axis=>{
+    const item=job.capabilities?.find(d=>d.axis===axis);
+    return item?.candidate_level==null?'Unconfirmed':item.candidate_level+' / 100 evidenced';
+  };
+  return dimensionGrid([
+    ['Role direction',role[screen.role_match]||'Unconfirmed'],
+    ['Seniority',screen.seniority_review?'Review required':screen.seniority||'Unconfirmed'],
+    ['Experience',years[screen.experience_status]||'Unconfirmed'],
+    ['Technical skills',level('technical')],
+    ['Project delivery',level('delivery')],
+    ['Education',screen.degree_requirements?.length?'Review JD requirements':'Requirement unconfirmed']
+  ]);
+}
+function resumeSuggestions(job){
+  const detail=node('details');
+  detail.append(node('summary','Resume improvements'));
+  const project=job.capabilities?.find(d=>d.axis==='delivery'&&d.resume_quote);
+  if(project){
+    detail.append(node('p','Move this evidence closer to the top of the relevant role or project. Clarify your own contribution and add a result only if you can verify it.'),
+      node('blockquote',project.resume_quote));
+  }
+  if(job.screening?.experience_status==='candidate_years_unknown'){
+    detail.append(node('p','Add verifiable start and end months to relevant positions. Keep employment, internships and personal projects separate.'));
+  }
+  if(detail.children.length===1){
+    detail.append(node('p','If you have a relevant example, add what you built, your responsibility, and the outcome. Use dates and results you can verify.'));
+  }
+  const action=node('button','Get advice for this JD','secondary');
+  action.type='button';
+  const feedback=node('div');
+  feedback.setAttribute('aria-live','polite');
+  action.onclick=async()=>{
+    const resume=$('resume').value;
+    if(resume.trim().length<150){
+      feedback.replaceChildren(node('p','Select, upload, or paste the resume you want to tailor in the left panel.','error'));
+      $('resume').focus();
+      return;
+    }
+    action.disabled=true;
+    feedback.replaceChildren(node('p','Comparing your resume with this JD…'));
+    try{
+      const result=await api('/api/resume-optimize',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({resume_text:resume,source:job.source,source_id:job.source_id})});
+      feedback.replaceChildren();
+      for(const item of result.suggestions){
+        feedback.append(node('p',item.advice),node('div','JD requirement','small'),node('blockquote',item.jd_requirement));
+        if(item.resume_evidence){
+          feedback.append(node('div','Resume evidence to highlight','small'),node('blockquote',item.resume_evidence));
+        }
+      }
+      if(result.optimized_markdown){
+        const download=node('button','Download tailored resume (.md)');
+        download.type='button';
+        download.onclick=()=>{
+          const filename=job.title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'target-job';
+          downloadText(result.optimized_markdown,'resume-'+filename+'.md','text/markdown;charset=utf-8');
+        };
+        feedback.append(node('p','The download keeps your resume and adds relevant highlights from your existing text.','small'),download);
+      }else if(result.suggestions.length){
+        feedback.append(node('p','The suggestions identify items to verify. Add confirmed experience to your resume and run the comparison again.','small'));
+      }else{
+        feedback.append(node('p','No concrete resume changes were identified for this JD.','small'));
+      }
+    }catch(error){
+      feedback.replaceChildren(node('p',error.message,'error'));
+    }finally{
+      action.disabled=false;
+    }
+  };
+  detail.append(action,feedback);
+  return detail;
+}
+function downloadText(text,filename,type){
+  const url=URL.createObjectURL(new Blob([text],{type}));
+  const link=node('a');link.href=url;link.download=filename;link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function retrievalDetails(retrieval){
+  const detail=node('details',undefined,'retrieval');
+  detail.append(node('summary','RAG retrieval · '+retrieval.shortlist.length+' jobs shortlisted'),
+    node('p','SQLite BM25 matched '+retrieval.matched_passages.toLocaleString()+' JD passages across '+retrieval.matched_jobs.toLocaleString()+' jobs. The model scored the complete JDs on the shortlist.'),
+    node('p','Search terms · '+retrieval.query_terms.join(', '),'small'));
+  if(retrieval.candidate_profile){
+    const profile=retrieval.candidate_profile;
+    const role=profile.role_family?.replaceAll('_',' ')||'unspecified';
+    const years=profile.experience_evidence||'experience duration unconfirmed';
+    detail.append(node('p','Resume profile · '+role+' · '+years,'small'),
+      node('p',retrieval.screened_jobs+' distinct jobs screened · '+retrieval.duplicate_jobs+' duplicate postings skipped','small'));
+  }
+  if(retrieval.company_distribution){
+    const distribution=retrieval.company_distribution;
+    const summary=rows=>rows.map(([company,count])=>company+' '+count).join(', ');
+    detail.append(node('p','Company counts · Archive leaders: '+summary(distribution.archive_leaders)
+      +' · BM25 top 50 leaders: '+summary(distribution.bm25_top_50.slice(0,3))
+      +' · Shortlist: '+summary(distribution.shortlist),'small'));
+  }
+  const hits=node('ol');
+  for(const job of retrieval.shortlist){
+    const entry=node('li');
+    entry.append(node('strong',[job.title,job.company,job.location].filter(Boolean).join(' · ')));
+    if(job.screening)entry.append(node('div',screeningText(job.screening),'small'));
+    entry.append(node('div',job.retrieval_hit.section+' · '+job.retrieval_hit.matched_terms.join(', '),'small'),
+      node('blockquote',job.retrieval_hit.quote));
+    hits.append(entry);
+  }
+  detail.append(hits);
+  return detail;
+}
+function recommendation(job){
+  const why=node('section',undefined,'why');
+  why.append(node('h4','Why this job was recommended'),node('p',job.reason));
+  if(job.screening){
+    why.append(node('p',screeningText(job.screening),'small'));
+    if(job.screening.experience_evidence){
+      const source=node('details');
+      source.append(node('summary','JD experience requirement'),node('blockquote',job.screening.experience_evidence));
+      why.append(source);
+    }
+    if(job.screening.degree_requirements?.length){
+      const education=node('details');
+      education.append(node('summary','JD education requirements'));
+      for(const item of job.screening.degree_requirements){
+        education.append(node('div',item.priority+' · '+item.level,'small'),node('blockquote',item.jd_quote));
+      }
+      why.append(education);
+    }
+  }
+  const hit=job.retrieval_hit;
+  why.append(node('div','Job description hit · '+hit.section,'small'),node('blockquote',hit.quote));
+  const evidence=job.evidence[0];
+  if(evidence){
+    if(!hit.quote.includes(evidence.job_quote)){
+      why.append(node('div','Job evidence used in the assessment','small'),node('blockquote',evidence.job_quote));
+    }
+    why.append(node('div','Resume evidence','small'),node('blockquote',evidence.resume_quote));
+  }
+  const unknown=job.gaps[0]||job.uncertainties[0];
+  if(unknown)why.append(node('p','To verify · '+unknown,'small'));
+  return why;
+}
+function render(data){report=data;$('results').replaceChildren();$('results').className='';$('notice').className='muted';$('notice').textContent=data.resume_summary+' · '+data.model+' · '+data.elapsed_seconds+'s'+(data.usage?.total_tokens?' · '+data.usage.total_tokens+' tokens':'');$('download').hidden=false;
+if(data.retrieval?.candidate_profile?.experience_timeline_evidence)$('results').append(profilePanel(data.retrieval.candidate_profile));
+if(data.retrieval)$('results').append(retrievalDetails(data.retrieval));
+else $('results').append(node('p','This report has no passage retrieval details. Restart JobMatch if it was running before the RAG update, then select Find matching jobs to generate a new report.','retrieval'));
+if(!data.matches.length)$('results').append(node('p','No supported matches were returned.'));
+const cards=node('div');
+if(data.matches.length>1){
+  const chooser=node('select');chooser.id='job-analysis';
+  const label=node('label','Choose a job to compare');label.htmlFor=chooser.id;
+  data.matches.forEach((job,index)=>{const option=node('option',(index+1)+'. '+[job.title,job.company,job.location].filter(Boolean).join(' · '));option.value=String(index);chooser.append(option);});
+  chooser.onchange=()=>{Array.from(cards.children).forEach((card,i)=>{card.hidden=i!==Number(chooser.value);});};
+  $('results').append(label,chooser);
+}
+$('results').append(cards);
+data.matches.forEach((job,index)=>{const card=node('article',undefined,'job');card.hidden=index!==0;card.append(node('span',job.fit_score+'/100 model technical assessment','score'),node('h3',job.title),node('p',job.company+' · '+(job.location||'Location not specified'),'muted'),matchDimensions(job));
+card.append(job.retrieval_hit?recommendation(job):node('p',job.reason));
+card.append(resumeSuggestions(job));
+try{const u=new URL('/api/job-description?'+new URLSearchParams({source:job.source,source_id:job.source_id}),location.href);if(['http:','https:'].includes(u.protocol)){const link=node('a','View historical job description ↗');link.href=u.href;link.target='_blank';link.rel='noopener noreferrer';card.append(link);}}catch{}
+if(job.capabilities?.length){if(job.radar_svg){const img=node('img');img.className='radar';img.alt='Five capability dimensions: job requirement versus resume evidence';img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(job.radar_svg);card.append(img);}const wrap=node('div',undefined,'tablewrap'),table=node('table'),head=node('tr');['Capability','Required / evidenced','Role requirement & comparison'].forEach(label=>head.append(node('th',label)));const thead=node('thead');thead.append(head);table.append(thead);const tbody=node('tbody');for(const d of job.capabilities){const tr=node('tr');tr.append(node('td',d.label));tr.append(node('td',(d.required_level??'N/A')+' / '+(d.candidate_level??'N/A'),'level'));const cell=node('td');cell.append(node('strong',d.requirement),node('div',d.assessment));const detail=node('details');detail.append(node('summary','Source evidence'));if(d.job_quote)detail.append(node('div','Job requirement','small'),node('blockquote',d.job_quote));if(d.resume_quote)detail.append(node('div','Resume evidence','small'),node('blockquote',d.resume_quote));if(!d.resume_quote)detail.append(node('p','Not established by the selected resume excerpts.','small'));cell.append(detail);tr.append(cell);tbody.append(tr);}table.append(tbody);wrap.append(table);card.append(wrap,node('p','Rubric: 25 exposure · 50 practical use · 75 independent delivery · 100 advanced expertise. Missing evidence stays unknown.','legend'));}
+const detail=node('details');detail.append(node('summary','Match evidence'));for(const ev of job.evidence){detail.append(node('h4',ev.requirement),node('div','Resume','small'),node('blockquote',ev.resume_quote),node('div','Job posting','small'),node('blockquote',ev.job_quote));}card.append(detail);list(card,'Gaps to investigate',job.gaps);list(card,'Conditions to verify',job.uncertainties);cards.append(card);});}
+$('sample').onchange=async()=>{if(!$('sample').value)return;try{$('resume').value=(await api('/api/resume?id='+encodeURIComponent($('sample').value))).text;}catch(e){$('notice').textContent=e.message;}};
+$('choosefile').onclick=()=>$('file').click();
+$('file').onchange=async()=>{const file=$('file').files[0];if(!file)return;if(file.size>300000){$('notice').textContent='Use a resume file smaller than 300 KB.';return;}$('filename').textContent=' '+file.name;$('resume').value=await file.text();$('sample').value='';};
+$('match').onclick=async()=>{if($('resume').value.trim().length<150){$('notice').textContent='Add a complete resume before matching.';return;}$('match').disabled=true;$('match').textContent='Finding matches…';$('notice').className='muted';$('notice').textContent='Searching job description sections and comparing five capabilities…';$('download').hidden=true;try{render(await api('/api/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({resume_text:$('resume').value,top_k:Number($('count').value),direction:'jobs'})}));}catch(e){$('notice').className='error';$('notice').textContent=e.message;}finally{$('match').disabled=false;$('match').textContent='Find matching jobs';}};
+$('latest').onclick=async()=>{try{render(await api('/api/latest'));}catch(e){$('notice').textContent=e.message;}};
+$('download').onclick=()=>{if(report)downloadText(JSON.stringify(report,null,2),'jobmatch-result.json','application/json');};
+(async()=>{try{const status=await api('/api/status');const resumeCount=await loadOptions();$('status').textContent=status.database_records.toLocaleString()+' jobs · '+resumeCount+' resumes · '+status.provider+' · '+(status.model_configured?'Key loaded':'API key not configured')+' · '+(status.rag_ready?'RAG ready':'RAG backend unavailable');if(!status.rag_ready){$('match').disabled=true;$('notice').textContent='Restart the JobMatch server to enable passage retrieval, then reload this page.';}}catch(e){$('status').textContent=e.message;}})();
+</script></body></html>

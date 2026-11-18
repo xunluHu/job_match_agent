@@ -1,0 +1,25 @@
+# Publish only the project README, packaging metadata, and application files.
+*
+!/.gitignore
+!/README.md
+!/pyproject.toml
+!/src/
+!/src/jobmatch_data/
+!/src/jobmatch_data/__init__.py
+!/src/jobmatch_data/__main__.py
+!/src/jobmatch_data/candidate_match.py
+!/src/jobmatch_data/capabilities.py
+!/src/jobmatch_data/cli.py
+!/src/jobmatch_data/gemini.py
+!/src/jobmatch_data/http.py
+!/src/jobmatch_data/job_qualification.py
+!/src/jobmatch_data/job_retrieval.py
+!/src/jobmatch_data/match.html
+!/src/jobmatch_data/matching.py
+!/src/jobmatch_data/openai_client.py
+!/src/jobmatch_data/pipeline.py
+!/src/jobmatch_data/resume_match.py
+!/src/jobmatch_data/resume_optimize.py
+!/src/jobmatch_data/sources.py
+!/src/jobmatch_data/storage.py
+!/src/jobmatch_data/webapp.py
