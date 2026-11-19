@@ -27,7 +27,7 @@ $env:OPENAI_API_KEY = Read-Host 'OpenAI API key'
 
 Use `--model MODEL_ID` to select a model available to your account. For Gemini, set `GEMINI_API_KEY` and start the server with `--provider gemini`.
 
-For Claude, install the optional Anthropic package once, set `ANTHROPIC_API_KEY` and start the server with `--provider claude`. The default model is `claude-opus-5-5`; `--model` selects another Claude model. Only the Claude provider needs this package.
+For Claude, install the optional Anthropic package once, set `ANTHROPIC_API_KEY` and start the server with `--provider claude`. The default model is `claude-sonnet-5-5`; for the cheapest runs use `--model claude-haiku-5-5`. Only the Claude provider needs this package.
 
 ```powershell
 & $python -m pip install anthropic

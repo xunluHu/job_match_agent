@@ -7,8 +7,10 @@ import os
 
 from .openai_client import strict_schema
 
-DEFAULT_MODEL = "claude-opus-5-5"
+DEFAULT_MODEL = "claude-sonnet-5-5"
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
+# Models that accept fallbacks="default". Haiku has no server-side fallback (a fallback list returns a 400).
+FALLBACK_MODELS = {"claude-sonnet-5-5", "claude-opus-5-5", "claude-opus-5", "claude-fable-5-2", "claude-fable-5-1"}
 # Claude's JSON outputs reject these keywords; callers validate scores and lengths in code.
 UNSUPPORTED = {"minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
                "minLength", "maxLength", "minItems", "maxItems", "uniqueItems"}
@@ -46,14 +48,16 @@ class ClaudeClient:
 
     def generate(self, system, prompt, schema):
         sdk = self.sdk
+        request = {"model": self.model, "max_tokens": self.max_tokens, "system": system,
+                   "messages": [{"role": "user", "content": prompt}],
+                   "output_config": {"effort": self.effort,
+                                     "format": {"type": "json_schema", "schema": claude_schema(schema)}}}
         try:
-            # fallbacks="default": if a safety classifier declines, the API retries on a suitable model in the same call.
-            response = self.client.beta.messages.create(
-                model=self.model, max_tokens=self.max_tokens, system=system,
-                messages=[{"role": "user", "content": prompt}],
-                output_config={"effort": self.effort,
-                               "format": {"type": "json_schema", "schema": claude_schema(schema)}},
-                betas=[FALLBACK_BETA], fallbacks="default")
+            if self.model in FALLBACK_MODELS:
+                # If a safety classifier declines, the API retries on a suitable model within the same call.
+                response = self.client.beta.messages.create(**request, betas=[FALLBACK_BETA], fallbacks="default")
+            else:
+                response = self.client.messages.create(**request)
         except sdk.AuthenticationError as exc:
             raise RuntimeError("Claude rejected the API key. Check ANTHROPIC_API_KEY.") from exc
         except sdk.RateLimitError as exc:

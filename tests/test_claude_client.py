@@ -44,16 +44,19 @@ def response(text='{"items": []}', stop_reason="end_turn", stop_details=None):
 def fake_sdk(reply=None, error=None):
     calls, inits = [], []
 
-    def create(**kwargs):
-        calls.append(kwargs)
-        if error:
-            raise error
-        return reply or response()
+    def endpoint(name):
+        def create(**kwargs):
+            calls.append(dict(kwargs, endpoint=name))
+            if error:
+                raise error
+            return reply or response()
+        return create
 
     class Anthropic:
         def __init__(self, **kwargs):
             inits.append(kwargs)
-            self.beta = SimpleNamespace(messages=SimpleNamespace(create=create))
+            self.messages = SimpleNamespace(create=endpoint("messages"))
+            self.beta = SimpleNamespace(messages=SimpleNamespace(create=endpoint("beta")))
 
     sdk = SimpleNamespace(Anthropic=Anthropic, APIStatusError=APIStatusError, AuthenticationError=AuthenticationError,
                           RateLimitError=RateLimitError, APIConnectionError=APIConnectionError)
@@ -69,7 +72,8 @@ class ClaudeClientTests(unittest.TestCase):
         self.assertEqual(metadata, {"provider": "claude", "model": "claude-opus-5-5",
                                     "usage": {"input_tokens": 120, "output_tokens": 30}})
         request = calls[0]
-        self.assertEqual((request["model"], request["system"]), (DEFAULT_MODEL, "SYSTEM"))
+        self.assertEqual(DEFAULT_MODEL, "claude-sonnet-5-5")
+        self.assertEqual((request["model"], request["system"], request["endpoint"]), (DEFAULT_MODEL, "SYSTEM", "beta"))
         self.assertEqual(request["messages"], [{"role": "user", "content": "PROMPT"}])
         self.assertEqual(request["output_config"]["effort"], "medium")
         self.assertEqual(request["output_config"]["format"], {"type": "json_schema", "schema": claude_schema(SCHEMA)})
@@ -110,10 +114,19 @@ class ClaudeClientTests(unittest.TestCase):
 
     def test_api_key_and_model_are_passed(self):
         sdk, calls, inits = fake_sdk()
-        client = ClaudeClient(model="claude-sonnet-5-5", api_key="test-key", sdk=sdk)
+        client = ClaudeClient(model="claude-opus-5-5", api_key="test-key", sdk=sdk)
         client.generate("s", "p", SCHEMA)
         self.assertEqual(inits, [{"api_key": "test-key"}])
-        self.assertEqual(calls[0]["model"], "claude-sonnet-5-5")
+        self.assertEqual((calls[0]["model"], calls[0]["fallbacks"]), ("claude-opus-5-5", "default"))
+
+    def test_haiku_has_no_fallback_option(self):
+        sdk, calls, _ = fake_sdk()
+        data, _ = ClaudeClient(model="claude-haiku-5-5", sdk=sdk).generate("s", "p", SCHEMA)
+        self.assertEqual(data, {"items": []})
+        self.assertEqual((calls[0]["endpoint"], calls[0]["model"]), ("messages", "claude-haiku-5-5"))
+        self.assertNotIn("fallbacks", calls[0])
+        self.assertNotIn("betas", calls[0])
+        self.assertEqual(calls[0]["output_config"]["format"]["type"], "json_schema")
 
 
 class MakeClaudeClient(unittest.TestCase):
