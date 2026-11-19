@@ -1,0 +1,6 @@
+[
+  {"name": "backend_newgrad", "job_type": "fulltime", "needs_sponsorship": true},
+  {"name": "ml_intern", "job_type": "intern", "needs_sponsorship": true},
+  {"name": "frontend_newgrad", "job_type": "fulltime", "needs_sponsorship": false},
+  {"name": "hardware_intern", "job_type": "intern", "needs_sponsorship": false}
+]

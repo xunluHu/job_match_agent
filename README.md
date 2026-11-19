@@ -38,6 +38,19 @@ Open [New US jobs](http://127.0.0.1:8000/new) from the same server. It is separa
 - With an API key, a ranking agent searches and reads job descriptions before choosing the 10 jobs. Without one, the page uses keyword ranking and says so.
 - To refresh once from the command line, run `& $python -m jobmatch_data latest-refresh`.
 
+### Evaluate New US jobs
+
+The evaluation compares keyword ranking, scoring every job with the model (`score_all`), the agent and the agent with a smaller read budget (`agent_low`) on four fictional resumes in `eval/resumes/`. It runs on a frozen copy of the jobs database so that every method sees the same jobs.
+
+```powershell
+& $python -m jobmatch_data latest-eval snapshot
+& $python -m jobmatch_data latest-eval run data/latest_eval/snapshots/SNAPSHOT.sqlite3 --methods keyword,score_all,agent,agent_low --repeats 3
+& $python -m jobmatch_data latest-eval labels data/latest_eval/runs/RUN.json
+& $python -m jobmatch_data latest-eval report data/latest_eval/runs/RUN.json data/latest_eval/runs/RUN.labels.csv
+```
+
+`labels` writes one row per resume and job that any method placed in its top 10. Put `1` (good match) or `0` (poor match) in the `label` column, then run `report`. It prints precision at 10, constraint violations, model calls, tokens, time, fallback rate and the agent's tool error rate for each method, and saves the table next to the run. Rerunning `labels` keeps labels you have already entered. Methods other than `keyword` need an API key, set up as for `serve`.
+
 ## Match from the command line
 
 ```powershell

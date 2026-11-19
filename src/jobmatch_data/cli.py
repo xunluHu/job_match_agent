@@ -44,6 +44,9 @@ def main():
     local.add_argument("--data-dir", type=Path, default=Path("data"))
     latest = commands.add_parser("latest-refresh", help="Refresh recent US postings for New US jobs once")
     latest.add_argument("--data-dir", type=Path, default=Path("data"))
+    evaluate = commands.add_parser("latest-eval", help="Evaluate New US jobs ranking methods (snapshot, run, labels, report)",
+                                   add_help=False)
+    evaluate.add_argument("rest", nargs=argparse.REMAINDER)
     for command in ("stats", "export"):
         sub = commands.add_parser(command)
         sub.add_argument("--data-dir", type=Path, default=Path("data"))
@@ -68,6 +71,9 @@ def main():
             from .latest_refresh import refresh
             report = refresh(args.data_dir / "latest_jobs.sqlite3", Client(args.data_dir, archive=False))
             print(json.dumps(report, ensure_ascii=False, indent=2))
+        elif args.command == "latest-eval":
+            from .latest_eval import main as evaluate_main
+            evaluate_main(args.rest)
         elif args.command == "stats":
             print(json.dumps(summarize(args.data_dir), ensure_ascii=False, indent=2))
         else:
