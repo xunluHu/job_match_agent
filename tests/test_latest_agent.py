@@ -94,6 +94,30 @@ class LatestAgent(unittest.TestCase):
         self.assertTrue(r["fallback"].startswith("llm_error"))
         self.assertEqual(len(r["matches"]), 10)
 
+    def test_non_runtime_llm_errors_fall_back(self):
+        for error in (ValueError("bad json"), ConnectionResetError("reset"), KeyError("output")):
+            r = agent_rank(POOL12, RESUME, ScriptedClient([error]))
+            self.assertTrue(r["fallback"].startswith("llm_error"), error)
+            self.assertIn(type(error).__name__, r["fallback"])
+            self.assertEqual(len(r["matches"]), 10)
+
+    def test_default_budget_allows_30_reads(self):
+        pool = [pool_job(f"k{i}", f"Role {i}", f"Co {i}", f"Job {i}", NOW - i) for i in range(40)]
+
+        def read_next(prompt):
+            done = prompt.count(": read_job J")
+            return act("read_job", job_id=f"J{done + 1:03d}")
+
+        r = agent_rank(pool, RESUME, ScriptedClient([read_next] * 60))
+        reads = [t for t in r["trace"] if t["action"] == "read_job" and t["error"] is None]
+        self.assertEqual(len(reads), 30)
+
+    def test_last_step_asks_for_submit(self):
+        client = ScriptedClient([act("search_jobs", query="python"), act("search_jobs", query="go")])
+        agent_rank(POOL12, RESUME, client, max_steps=2)
+        self.assertNotIn("last step", client.prompts[0][1].lower())
+        self.assertIn("last step", client.prompts[1][1].lower())
+
     def test_small_pool_submits_all(self):
         client = ScriptedClient([submit(["J001", "J002", "J003"])])
         r = agent_rank(POOL12[:3], RESUME, client)

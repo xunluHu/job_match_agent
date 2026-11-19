@@ -58,7 +58,7 @@ def _line(job_id, job, locations=True):
     return " | ".join(parts)
 
 
-def agent_rank(pool, resume, client, n=10, max_steps=20, max_reads=30, max_tokens=250_000):
+def agent_rank(pool, resume, client, n=10, max_steps=40, max_reads=30, max_tokens=250_000):
     ids = {f"J{i:03d}": job["key"] for i, job in enumerate(pool, 1)}
     jobs = {job_id: job for job_id, job in zip(ids, pool)}
     n = min(n, len(pool))
@@ -87,10 +87,12 @@ def agent_rank(pool, resume, client, n=10, max_steps=20, max_reads=30, max_token
             rendered.append(f"{header}\nObservation: {observation}")
         prompt = (static + "\nHISTORY:\n" + ("\n\n".join(rendered) if rendered else "(none yet)")
                   + f"\n\nSteps left: {max_steps - step + 1}, reads left: {max(max_reads - reads, 0)}")
+        if step == max_steps:
+            prompt += "\nThis is your last step: submit now."
         try:
             action, metadata = client.generate(SYSTEM.format(n=n), prompt, ACTION_SCHEMA)
-        except RuntimeError as exc:
-            return fall_back(f"llm_error: {exc}")
+        except Exception as exc:  # any client failure (HTTP, network, bad JSON) ends the run with keyword ranking
+            return fall_back(f"llm_error: {type(exc).__name__}: {exc}")
         calls += 1
         used_in, used_out = usage_tokens(metadata)
         input_tokens += used_in

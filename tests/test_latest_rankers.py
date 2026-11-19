@@ -130,6 +130,12 @@ class ScoreAll(unittest.TestCase):
         self.assertIsNone(r["fallback"])
         self.assertTrue(any("timeout" in str(t) for t in r["trace"]))
 
+    def test_non_runtime_error_batch_is_skipped(self):
+        client = ScriptedClient([ValueError("bad json"), scores((1, 10), (2, 99))])
+        r = score_all(SCORE_POOL, BACKEND_RESUME, client)
+        self.assertEqual([m["key"] for m in r["matches"]], ["best", "k10"])
+        self.assertTrue(any("ValueError" in str(t) for t in r["trace"]))
+
     def test_all_batches_fail_fall_back(self):
         client = ScriptedClient([RuntimeError("down"), RuntimeError("down")])
         r = score_all(SCORE_POOL, BACKEND_RESUME, client)

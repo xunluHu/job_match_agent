@@ -147,6 +147,23 @@ class LatestWeb(unittest.TestCase):
         self.assertEqual(body["method"], "keyword")
         self.assertEqual(body["note"], "The agent did not finish, so these results use keyword ranking.")
 
+    def test_agent_non_runtime_error_falls_back(self):
+        self.start(ScriptedClient([ValueError("bad json")]))
+        self.seed()
+        self.save_resume()
+        status, body = self.call("/api/new/match", {})
+        self.assertEqual((status, body["method"]), (200, "keyword"))
+        self.assertEqual(body["note"], "The agent did not finish, so these results use keyword ranking.")
+
+    def test_corrupt_settings_returns_json_error(self):
+        self.start()
+        self.seed()
+        self.save_resume()
+        (self.tmp / "profile" / "settings.json").write_text('{"job_type": "parttime"}', encoding="utf-8")
+        status, body = self.call("/api/new/match", {})
+        self.assertEqual(status, 500)
+        self.assertIn("error", body)
+
     def test_last_404_before_any_match(self):
         self.start()
         self.assertEqual(self.call("/api/new/last")[0], 404)

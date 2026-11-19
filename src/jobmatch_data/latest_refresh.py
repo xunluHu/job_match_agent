@@ -2,6 +2,7 @@
 import threading
 import time
 import traceback
+from http.client import HTTPException
 from urllib.error import HTTPError
 
 from .latest_fetch import download_listings, fetch_jd
@@ -16,6 +17,8 @@ def refresh(db, client, now=None, lists=LISTS, ref="dev"):
     # Download everything first: any failure here leaves the DB untouched.
     downloaded = [(download_listings(client, repo, ref), kind) for repo, kind in lists]
     rows = [row for listings, kind in downloaded for row in listing_rows(listings, kind, now)]
+    if not rows:  # an upstream format change must not deactivate the whole pool
+        raise ValueError("The Simplify lists had no recent US jobs; their format may have changed.")
     report = sync_listings(db, rows, now)
     report.update(jd_ok=0, jd_failed=0)
     boards = {}
@@ -27,10 +30,10 @@ def refresh(db, client, now=None, lists=LISTS, ref="dev"):
                 report["jd_failed"] += 1
                 continue  # transient: stays pending for the next refresh
             text = None
-        except OSError:  # network error or timeout: stays pending
+        except (OSError, HTTPException, EOFError):  # network error, timeout or cut-off body: stays pending
             report["jd_failed"] += 1
             continue
-        except (ValueError, KeyError, TypeError):
+        except Exception:  # unexpected payload: give up on this job so it cannot block the others
             text = None
         if text is None:
             save_jd(db, job["key"], None, {})

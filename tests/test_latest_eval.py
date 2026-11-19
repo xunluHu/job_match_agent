@@ -1,13 +1,15 @@
 import csv
+import json
 import re
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from jobmatch_data.latest_eval import (INJECTION, METHODS, check_constraints, inject_snapshot, label_rows,
-                                       load_eval_resumes, read_labels, report, run_eval, snapshot, to_markdown,
-                                       write_labels)
+                                       load_eval_resumes, main, read_labels, report, run_eval, snapshot,
+                                       to_markdown, write_labels)
 from jobmatch_data.latest_rules import listing_rows
 from jobmatch_data.latest_store import JOB_TYPES, pool, save_jd, set_meta, sync_listings
 from jobmatch_data.resume_match import clean_resume
@@ -151,17 +153,20 @@ class LatestEval(unittest.TestCase):
 
     def test_vulnerable_model_detected(self):
         run = run_eval(self.snap, RESUMES, ["agent"], ScriptedClient([vulnerable] * 20), inject=True)
-        self.assertEqual(run["runs"][0]["injection"], {"target": "k10", "in_top10": True, "rank": 1})
+        self.assertEqual(run["runs"][0]["injection"], {"target": "k10", "in_top10": True, "rank": 1, "target_read": True})
         rows_by_method = {row["method"]: row for row in report(run, {})}
         self.assertEqual(rows_by_method["agent"]["injection_success"], 1.0)
+        self.assertEqual(rows_by_method["agent"]["injection_read_rate"], 1.0)
         self.assertEqual(original_description(self.snap, "k10"), "Java role 10")  # snapshot untouched
 
     def test_robust_model(self):
         run = run_eval(self.snap, RESUMES, ["keyword", "agent"], ScriptedClient([robust]), inject=True)
         self.assertNotIn("injection", run["runs"][0])  # keyword is not an LLM method
-        self.assertEqual(run["runs"][1]["injection"], {"target": "k10", "in_top10": False, "rank": None})
+        self.assertEqual(run["runs"][1]["injection"],
+                         {"target": "k10", "in_top10": False, "rank": None, "target_read": False})
         rows_by_method = {row["method"]: row for row in report(run, {})}
         self.assertEqual(rows_by_method["agent"]["injection_success"], 0.0)
+        self.assertEqual(rows_by_method["agent"]["injection_read_rate"], 0.0)
         self.assertIsNone(rows_by_method["keyword"]["injection_success"])
 
     def test_stability_jaccard(self):
@@ -171,6 +176,13 @@ class LatestEval(unittest.TestCase):
         rows = {row["method"]: row for row in report(run, {})}
         self.assertEqual(rows["agent"]["stability"], round(5 / 15, 3))
         self.assertIsNone(rows["keyword"]["stability"])
+
+    def test_run_defaults_to_keyword_without_a_client(self):
+        with mock.patch("jobmatch_data.latest_eval.make_client", side_effect=AssertionError("no LLM expected")), \
+                mock.patch("builtins.print"):
+            main(["run", str(self.snap), "--data-dir", str(self.tmp), "--resumes", str(ROOT / "eval" / "resumes")])
+        run = json.loads(next((self.tmp / "latest_eval" / "runs").glob("*.json")).read_text(encoding="utf-8"))
+        self.assertEqual({r["method"] for r in run["runs"]}, {"keyword"})
 
     def test_eval_resumes_load(self):
         resumes = load_eval_resumes(ROOT / "eval" / "resumes")

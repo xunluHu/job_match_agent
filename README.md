@@ -33,7 +33,7 @@ Open [JobMatch](http://127.0.0.1:8000). Paste a resume or upload a PDF, Markdown
 
 Open [New US jobs](http://127.0.0.1:8000/new) from the same server. It is separate from the archive match above and uses its own database, `data/latest_jobs.sqlite3`.
 
-- While `serve` runs, a background refresh downloads recent US postings from the SimplifyJobs new-grad and internship lists at startup and every 30 minutes. It fetches job descriptions from public Greenhouse, Lever and Ashby job APIs. Select **Refresh now** to start one immediately. A refresh makes no model calls.
+- While `serve` runs, a background refresh downloads recent US postings from the SimplifyJobs new-grad and internship lists at startup and every 30 minutes. It fetches job descriptions from public Greenhouse, Lever, Ashby and Workday job pages. Select **Refresh now** to start one immediately. A refresh makes no model calls.
 - Save one resume, choose internships, full-time or both, and tick **I need visa sponsorship** if it applies. Then select **Find new jobs**. The page shows the 10 best technical matches from the last 7 days (14 days if fewer than 10 qualify), each with a link, degree and experience requirements, a visa note and matched skills.
 - With an API key, a ranking agent searches and reads job descriptions before choosing the 10 jobs. Without one, the page uses keyword ranking and says so.
 - To refresh once from the command line, run `& $python -m jobmatch_data latest-refresh`.

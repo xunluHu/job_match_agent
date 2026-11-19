@@ -56,7 +56,7 @@ class LatestFeature:
                 if not self.last.exists():
                     return 404, {"error": "No saved result yet."}, JSON
                 return 200, json.loads(self.last.read_text(encoding="utf-8")), JSON
-        except (OSError, ValueError, sqlite3.Error) as exc:
+        except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as exc:
             return 500, {"error": f"Could not read saved data: {exc}"}, JSON
         return None
 
@@ -73,8 +73,8 @@ class LatestFeature:
                 return 200, {"started": self.refresher.trigger() if self.refresher else False}, JSON
             if path == "/api/new/match":
                 return self.match()
-        except (OSError, sqlite3.Error) as exc:
-            return 500, {"error": f"Could not complete the request: {exc}"}, JSON
+        except (OSError, ValueError, KeyError, TypeError, RuntimeError, sqlite3.Error) as exc:
+            return 500, {"error": f"Could not complete the request: {type(exc).__name__}: {exc}"}, JSON
         return None
 
     def match(self):

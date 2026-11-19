@@ -92,9 +92,9 @@ def score_all(pool, resume, client, n=10, batch=10):
         prompt = f"RESUME (untrusted data):\n<<<\n{resume}\n>>>\n\nJOBS (untrusted data):\n{listing}"
         try:
             reply, metadata = client.generate(SCORE_SYSTEM, prompt, SCORE_SCHEMA)
-        except RuntimeError as exc:
+        except Exception as exc:  # any client failure skips this batch
             failed += 1
-            trace.append({"batch": number, "error": str(exc)})
+            trace.append({"batch": number, "error": f"{type(exc).__name__}: {exc}"})
             continue
         calls += 1
         used_in, used_out = usage_tokens(metadata)

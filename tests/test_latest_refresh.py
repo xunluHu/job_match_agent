@@ -1,4 +1,5 @@
 import tempfile
+from http.client import IncompleteRead
 import threading
 import time
 import unittest
@@ -98,6 +99,26 @@ class LatestRefresh(unittest.TestCase):
         with self.assertRaises(ValueError):
             refresh(self.db, FakeHttp(routes(**{NG: []})), now=NOW + 60)
         self.assertEqual(counts(self.db, 7, NOW + 60)["total"], 3)
+
+    def test_listing_without_usable_rows_is_an_error(self):
+        refresh(self.db, FakeHttp(routes()), now=NOW)
+        renamed = [{k: v for k, v in item.items() if k != "date_posted"} for item in newgrad()]
+        with self.assertRaises(ValueError):
+            refresh(self.db, FakeHttp(routes(**{NG: renamed, IN: renamed})), now=NOW + 60)
+        self.assertEqual(counts(self.db, 7, NOW + 60)["total"], 3)
+
+    def test_unexpected_jd_error_does_not_stop_the_loop(self):
+        bad_lever = {"descriptionPlain": JD, "lists": ["not an object"]}
+        report = refresh(self.db, FakeHttp(routes(**{LEVER_API: bad_lever})), now=NOW)
+        self.assertEqual((report["jd_ok"], report["jd_failed"]), (1, 1))
+        self.assertEqual(get_meta(self.db, "last_refresh"), str(NOW))
+        self.assertEqual(pending_jd(self.db), [])
+
+    def test_incomplete_read_stays_pending(self):
+        url = GH_API.format(1)
+        report = refresh(self.db, FakeHttp(routes(**{url: IncompleteRead(b"")})), now=NOW)
+        self.assertEqual((report["jd_ok"], report["jd_failed"]), (1, 1))
+        self.assertEqual([r["key"] for r in pending_jd(self.db)], ["gh1"])
 
     def test_refresher_status_and_trigger(self):
         release, started = threading.Event(), threading.Event()
