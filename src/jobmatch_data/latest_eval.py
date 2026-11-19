@@ -215,7 +215,7 @@ def main(argv):
     run.add_argument("--repeats", type=int, default=1)
     run.add_argument("--resumes", type=Path, default=ROOT / "eval" / "resumes")
     run.add_argument("--data-dir", type=Path, default=Path("data"))
-    run.add_argument("--provider", choices=["openai", "gemini"], default="openai")
+    run.add_argument("--provider", choices=["openai", "gemini", "claude"], default="openai")
     run.add_argument("--model")
     run.add_argument("--key-file", type=Path)
     run.add_argument("--max-output-tokens", type=int, default=4000)

@@ -180,8 +180,9 @@ def serve(args):
     index = JobIndex(args.database)
     try:
         client = make_client(args)
-    except ValueError:
-        client = None
+        problem = None
+    except ValueError as exc:
+        client, problem = None, str(exc)
     data_dir = ROOT / "data"
     refresher = Refresher(data_dir / "latest_jobs.sqlite3", lambda: Client(data_dir, archive=False))
     server = make_server(index, client, args.port, latest=LatestFeature(data_dir, client, refresher))
@@ -189,7 +190,7 @@ def serve(args):
     print(f"JobMatch: http://127.0.0.1:{args.port} ({len(index.jobs)} indexed jobs)", flush=True)
     print(f"New US jobs: http://127.0.0.1:{args.port}/new (refreshes every 30 minutes)", flush=True)
     if client is None:
-        print("No API key found. Configure it and restart the server.", flush=True)
+        print(f"No API key found ({problem}). Configure it and restart the server.", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

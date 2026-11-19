@@ -9,6 +9,9 @@ description = "Historical job posting ingestion for JobMatch"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+claude = ["anthropic>=1.0"]
+
 [project.scripts]
 jobmatch-data = "jobmatch_data.cli:main"
 

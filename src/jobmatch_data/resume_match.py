@@ -353,6 +353,9 @@ def run_cli(args):
 
 
 def make_client(args):
+    if getattr(args, "provider", "openai") == "claude":
+        from .claude_client import make_claude_client
+        return make_claude_client(args.key_file, args.model)
     if getattr(args, "provider", "openai") == "openai":
         from .openai_client import OpenAIClient, load_config as load_openai_config
         return OpenAIClient(load_openai_config(ROOT, args.key_file, args.model), getattr(args, "max_output_tokens", 4000))

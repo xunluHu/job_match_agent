@@ -27,6 +27,14 @@ $env:OPENAI_API_KEY = Read-Host 'OpenAI API key'
 
 Use `--model MODEL_ID` to select a model available to your account. For Gemini, set `GEMINI_API_KEY` and start the server with `--provider gemini`.
 
+For Claude, install the optional Anthropic package once, set `ANTHROPIC_API_KEY` and start the server with `--provider claude`. The default model is `claude-opus-5-5`; `--model` selects another Claude model. Only the Claude provider needs this package.
+
+```powershell
+& $python -m pip install anthropic
+$env:ANTHROPIC_API_KEY = Read-Host 'Anthropic API key'
+& $python -m jobmatch_data serve --database data/jobs.sqlite3 --provider claude
+```
+
 Open [JobMatch](http://127.0.0.1:8000). Paste a resume or upload a PDF, Markdown or text file and select **Find matching jobs**. PDF text is extracted in the browser with PDF.js, which loads from jsDelivr the first time you choose a PDF. The PDF file is not uploaded. A scanned PDF without selectable text cannot be read; paste its text instead. The app sends relevant resume excerpts and job descriptions to the configured model provider.
 
 ## New US jobs
