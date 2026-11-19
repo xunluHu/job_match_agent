@@ -27,7 +27,7 @@ $env:OPENAI_API_KEY = Read-Host 'OpenAI API key'
 
 Use `--model MODEL_ID` to select a model available to your account. For Gemini, set `GEMINI_API_KEY` and start the server with `--provider gemini`.
 
-Open [JobMatch](http://127.0.0.1:8000). Paste a resume or upload a Markdown or text file and select **Find matching jobs**. The app sends relevant resume excerpts and job descriptions to the configured model provider.
+Open [JobMatch](http://127.0.0.1:8000). Paste a resume or upload a PDF, Markdown or text file and select **Find matching jobs**. PDF text is extracted in the browser with PDF.js, which loads from jsDelivr the first time you choose a PDF. The PDF file is not uploaded. A scanned PDF without selectable text cannot be read; paste its text instead. The app sends relevant resume excerpts and job descriptions to the configured model provider.
 
 ## Match from the command line
 
