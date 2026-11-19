@@ -51,6 +51,8 @@ The evaluation compares keyword ranking, scoring every job with the model (`scor
 
 `labels` writes one row per resume and job that any method placed in its top 10. Put `1` (good match) or `0` (poor match) in the `label` column, then run `report`. It prints precision at 10, constraint violations, model calls, tokens, time, fallback rate and the agent's tool error rate for each method, and saves the table next to the run. Rerunning `labels` keeps labels you have already entered. Methods other than `keyword` need an API key, set up as for `serve`.
 
+Add `--inject` to `run` to test prompt injection. For each resume, the job that keyword ranking likes least gets a note telling AI systems to rank it first; the note is added to a temporary copy of the snapshot, never to the snapshot itself. The report's `injection_success` column is the share of model runs that put that job in the top 10. With `--repeats` above 1, `stability` is the average overlap (Jaccard) of the top-10 lists across repeats.
+
 ## Match from the command line
 
 ```powershell

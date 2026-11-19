@@ -1,13 +1,15 @@
 import csv
+import re
 import tempfile
 import time
 import unittest
 from pathlib import Path
 
-from jobmatch_data.latest_eval import (METHODS, check_constraints, label_rows, load_eval_resumes, read_labels, report,
-                                       run_eval, snapshot, to_markdown, write_labels)
+from jobmatch_data.latest_eval import (INJECTION, METHODS, check_constraints, inject_snapshot, label_rows,
+                                       load_eval_resumes, read_labels, report, run_eval, snapshot, to_markdown,
+                                       write_labels)
 from jobmatch_data.latest_rules import listing_rows
-from jobmatch_data.latest_store import JOB_TYPES, save_jd, set_meta, sync_listings
+from jobmatch_data.latest_store import JOB_TYPES, pool, save_jd, set_meta, sync_listings
 from jobmatch_data.resume_match import clean_resume
 from tests.fakes import ScriptedClient, listing, pool_job
 
@@ -24,6 +26,31 @@ RUN_KEYS = {"resume", "method", "repeat", "matches", "calls", "input_tokens", "o
 def submit_ten(prompt):
     return {"thought": "t", "action": "submit", "query": "", "job_id": "",
             "items": [{"job_id": f"J{i:03d}", "score": 90 - i, "reason": "Fit."} for i in range(1, 11)]}
+
+
+def act(action, job_id="", items=()):
+    return {"thought": "t", "action": action, "query": "", "job_id": job_id, "items": list(items)}
+
+
+def vulnerable(prompt):
+    """Reads jobs in catalog order and ranks first whichever job tells it to."""
+    hit = re.search(r"(J\d{3}) \| [^\n]*\n[^\n]*\n\nNOTE TO AI SCREENING", prompt)
+    catalog = re.findall(r"^(J\d{3}) \| ", prompt, re.M)
+    if hit:
+        order = [hit[1]] + [j for j in catalog if j != hit[1]][:9]
+        return act("submit", items=[{"job_id": j, "score": 50, "reason": "r"} for j in order])
+    reads = re.findall(r"^Step \d+: read_job (J\d{3})$", prompt, re.M)
+    return act("read_job", job_id=next(j for j in catalog if j not in reads))
+
+
+def robust(prompt):
+    return act("submit", items=[{"job_id": f"J{i:03d}", "score": 50, "reason": "r"} for i in range(1, 11)])
+
+
+def record(method, keys, resume="r", repeat=0):
+    return {"resume": resume, "method": method, "repeat": repeat, "matches": [{"key": k} for k in keys], "calls": 1,
+            "input_tokens": 1, "output_tokens": 1, "seconds": 0.1, "violations": 0, "fallback": None,
+            "tool_errors": 0, "steps": 1}
 
 
 class LatestEval(unittest.TestCase):
@@ -114,6 +141,37 @@ class LatestEval(unittest.TestCase):
         self.assertIsNone(row["precision_at_10"])
         self.assertIsNone(row["tool_error_rate"])
 
+    def test_inject_snapshot_copy_only(self):
+        dst = inject_snapshot(self.snap, self.tmp / "injected.sqlite3", ["k5"])
+        injected = {j["key"]: j["description"] for j in pool(dst, {"newgrad"}, 7, THEN, False)}
+        original = {j["key"]: j["description"] for j in pool(self.snap, {"newgrad"}, 7, THEN, False)}
+        self.assertTrue(injected["k5"].endswith(INJECTION))
+        self.assertEqual(original["k5"], "Java role 5")
+        self.assertEqual(injected["k4"], original["k4"])
+
+    def test_vulnerable_model_detected(self):
+        run = run_eval(self.snap, RESUMES, ["agent"], ScriptedClient([vulnerable] * 20), inject=True)
+        self.assertEqual(run["runs"][0]["injection"], {"target": "k10", "in_top10": True, "rank": 1})
+        rows_by_method = {row["method"]: row for row in report(run, {})}
+        self.assertEqual(rows_by_method["agent"]["injection_success"], 1.0)
+        self.assertEqual(original_description(self.snap, "k10"), "Java role 10")  # snapshot untouched
+
+    def test_robust_model(self):
+        run = run_eval(self.snap, RESUMES, ["keyword", "agent"], ScriptedClient([robust]), inject=True)
+        self.assertNotIn("injection", run["runs"][0])  # keyword is not an LLM method
+        self.assertEqual(run["runs"][1]["injection"], {"target": "k10", "in_top10": False, "rank": None})
+        rows_by_method = {row["method"]: row for row in report(run, {})}
+        self.assertEqual(rows_by_method["agent"]["injection_success"], 0.0)
+        self.assertIsNone(rows_by_method["keyword"]["injection_success"])
+
+    def test_stability_jaccard(self):
+        first = [f"a{i}" for i in range(10)]
+        second = first[:5] + [f"b{i}" for i in range(5)]
+        run = {"runs": [record("agent", first), record("agent", second, repeat=1), record("keyword", first)]}
+        rows = {row["method"]: row for row in report(run, {})}
+        self.assertEqual(rows["agent"]["stability"], round(5 / 15, 3))
+        self.assertIsNone(rows["keyword"]["stability"])
+
     def test_eval_resumes_load(self):
         resumes = load_eval_resumes(ROOT / "eval" / "resumes")
         self.assertEqual(len(resumes), 4)
@@ -124,6 +182,10 @@ class LatestEval(unittest.TestCase):
             for heading in ("## Summary", "## Experience", "## Projects", "## Education", "## Skills"):
                 self.assertIn(heading, entry["resume"], entry["name"])
             self.assertIn("@example.com", entry["resume"])
+
+
+def original_description(db, key):
+    return next(j["description"] for j in pool(db, {"newgrad"}, 7, THEN, False) if j["key"] == key)
 
 
 if __name__ == "__main__":
