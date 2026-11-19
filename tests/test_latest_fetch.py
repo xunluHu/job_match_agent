@@ -20,6 +20,11 @@ class LatestFetch(unittest.TestCase):
                          "Build APIs")
         self.assertIsNone(extract_jd("greenhouse", {"content": ""}, "1"))
 
+    def test_extract_workday(self):
+        self.assertEqual(extract_jd("workday", {"jobPostingInfo": {"jobDescription": "<p>Design <b>chips</b></p>"}}, "r"),
+                         "Design chips")
+        self.assertIsNone(extract_jd("workday", {}, "r"))
+
     def test_extract_non_object_payload(self):
         for platform in ("greenhouse", "lever", "ashby"):
             self.assertIsNone(extract_jd(platform, ["unexpected"], "1"))

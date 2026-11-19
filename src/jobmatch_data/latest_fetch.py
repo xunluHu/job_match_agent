@@ -26,6 +26,9 @@ def extract_jd(platform, payload, jid):
     elif platform == "ashby":
         job = next((j for j in payload.get("jobs") or [] if j.get("id") == jid), None)
         text = job and (job.get("descriptionPlain") or plain(job.get("descriptionHtml")))
+    elif platform == "workday":
+        info = payload.get("jobPostingInfo")
+        text = plain(info.get("jobDescription")) if isinstance(info, dict) else None
     else:
         return None
     return (text or "").strip() or None

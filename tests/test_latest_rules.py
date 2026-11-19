@@ -27,6 +27,24 @@ class LatestRules(unittest.TestCase):
         self.assertIsNone(parse_job_url("https://evil.example/greenhouse.io/x/jobs/1"))
         self.assertIsNone(parse_job_url("https://boards.greenhouse.io/embed/job_app?for=x&token=1"))
 
+    def test_parse_workday(self):
+        self.assertEqual(
+            parse_job_url("https://acme.wd5.myworkdayjobs.com/en-US/External/job/Seattle-WA/Software-Engineer_R123?src=x"),
+            JobRef("workday",
+                   "https://acme.wd5.myworkdayjobs.com/wday/cxs/acme/External/job/Seattle-WA/Software-Engineer_R123",
+                   "Seattle-WA/Software-Engineer_R123"))
+        self.assertEqual(parse_job_url("https://acme.wd1.myworkdayjobs.com/Careers/job/Austin-TX/SWE_JR9#top").api_url,
+                         "https://acme.wd1.myworkdayjobs.com/wday/cxs/acme/Careers/job/Austin-TX/SWE_JR9")
+        self.assertEqual(
+            parse_job_url("https://wd5.myworkdaysite.com/recruiting/microchiphr/External/job/AZ---Chandler/Engineer-I_R4899-26").api_url,
+            "https://wd5.myworkdaysite.com/wday/cxs/microchiphr/External/job/AZ---Chandler/Engineer-I_R4899-26")
+        self.assertEqual(
+            parse_job_url("https://wd1.myworkdaysite.com/en-US/recruiting/acme/Jobs/job/Remote/SWE_R1").api_url,
+            "https://wd1.myworkdaysite.com/wday/cxs/acme/Jobs/job/Remote/SWE_R1")
+        self.assertIsNone(parse_job_url("https://evil.example/acme.wd5.myworkdayjobs.com/x/job/y"))
+        self.assertIsNone(parse_job_url("https://acme.wd5.myworkdayjobs.com.evil.example/x/job/y"))
+        self.assertIsNone(parse_job_url("https://acme.wd5.myworkdayjobs.com/External/details/y"))
+
     def test_listing_rows_filters(self):
         gh = "https://job-boards.greenhouse.io/acme/jobs/1"
         items = [

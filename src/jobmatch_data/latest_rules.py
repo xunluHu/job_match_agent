@@ -31,6 +31,11 @@ CITIZEN = re.compile(
     r"|\bitar\b|export\s+control|u\.?s\.?\s+persons?\b|must\s+be\s+a\s+\(i\)\s+u\.?s\.?\s+citizen", re.I)
 
 
+LOCALE = re.compile(r"[a-z]{2}-[A-Z]{2}")
+WD_JOBS = re.compile(r"([\w-]+)\.wd\d+\.myworkdayjobs\.com")
+WD_SITE = re.compile(r"wd\d+\.myworkdaysite\.com")
+
+
 def in_us(location):
     # ponytail: place names and state codes only; "Remote" or "Hybrid" without a place counts as non-US.
     return not CA_PROVINCE.search(location) and bool(US_CODE.search(location) or US_NAME.search(location))
@@ -61,6 +66,16 @@ def parse_job_url(url):
     if host == "jobs.ashbyhq.com" and len(path) >= 2:
         co, jid = quote(path[0]), path[1]
         return JobRef("ashby", f"https://api.ashbyhq.com/posting-api/job-board/{co}", jid)
+    # Workday's public job JSON (unofficial): /wday/cxs/{tenant}/{site}/job/{rest}
+    if path and LOCALE.fullmatch(path[0]):
+        path = path[1:]
+    tenant = WD_JOBS.fullmatch(host)
+    if tenant and len(path) >= 3 and path[1] == "job":
+        site, rest = path[0], "/".join(path[2:])
+        return JobRef("workday", f"https://{host}/wday/cxs/{tenant[1]}/{site}/job/{rest}", rest)
+    if WD_SITE.fullmatch(host) and len(path) >= 5 and path[0] == "recruiting" and path[3] == "job":
+        tenant, site, rest = path[1], path[2], "/".join(path[4:])
+        return JobRef("workday", f"https://{host}/wday/cxs/{tenant}/{site}/job/{rest}", rest)
     return None
 
 
