@@ -1,5 +1,6 @@
 """Small read-only HTTP client with retries and an auditable response archive."""
 
+import gzip
 import hashlib
 import json
 import time
@@ -10,9 +11,10 @@ from urllib.request import Request, urlopen
 
 
 class Client:
-    def __init__(self, root: Path, delay: float = 0.5):
+    def __init__(self, root: Path, delay: float = 0.5, archive: bool = True):
         self.root = root
         self.delay = delay
+        self.archive = archive
         self.last_request = 0.0
         self.responses = []
 
@@ -23,10 +25,15 @@ class Client:
             request = Request(url, headers={
                 "User-Agent": "JobMatch-Research/0.1 (public job postings)",
                 "Accept": "application/json",
+                "Accept-Encoding": "gzip",
             })
             try:
                 with urlopen(request, timeout=30) as response:
                     raw = response.read()
+                    if response.headers.get("Content-Encoding") == "gzip":
+                        raw = gzip.decompress(raw)
+                    if not self.archive:
+                        return json.loads(raw)
                     fetched_at = datetime.now(timezone.utc).isoformat()
                     digest = hashlib.sha256(raw).hexdigest()
                     folder = self.root / "raw"
