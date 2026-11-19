@@ -2,11 +2,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from jobmatch_data.latest_rankers import (bm25_scores, candidate_pool, jd_excerpt, keyword_rank, present,
-                                          usage_tokens)
+from jobmatch_data.latest_rankers import (TECH_ONLY, UNTRUSTED, bm25_scores, candidate_pool, jd_excerpt,
+                                          keyword_rank, present, score_all, usage_tokens)
 from jobmatch_data.latest_rules import listing_rows
 from jobmatch_data.latest_store import save_jd, sync_listings
-from tests.fakes import listing, pool_job
+from tests.fakes import ScriptedClient, listing, pool_job
 
 NOW = 1_800_000_000
 BACKEND_RESUME = """## Summary
@@ -79,6 +79,61 @@ class LatestRankers(unittest.TestCase):
                          (1, "a", ["Seattle, WA"], ["Python"], 80, "r"))
         for field in ("title", "company", "posted", "url", "degree", "min_years", "visa"):
             self.assertIn(field, item)
+
+
+def scores(*pairs):
+    return {"items": [{"i": i, "score": score, "reason": f"r{i}"} for i, score in pairs]}
+
+
+SCORE_POOL = [pool_job(f"k{i}", f"Role {i}", f"Co {i}", f"Python job {i}", NOW - i, url=f"https://jobs.example.com/{i}")
+              for i in range(11)] + [pool_job("best", "Best", "Co B", "Python FastAPI", NOW - 20)]
+
+
+class ScoreAll(unittest.TestCase):
+    def test_score_all_batches_and_sorts(self):
+        client = ScriptedClient([scores(*[(i, 50 + i) for i in range(1, 11)]), scores((1, 10), (2, 99))])
+        r = score_all(SCORE_POOL, BACKEND_RESUME, client)
+        self.assertEqual(r["calls"], 2)
+        self.assertEqual(r["matches"][0], {"key": "best", "score": 99, "reason": "r2"})
+        self.assertEqual([m["key"] for m in r["matches"][1:4]], ["k9", "k8", "k7"])
+        self.assertEqual(len(r["matches"]), 10)
+        self.assertNotIn("k10", [m["key"] for m in r["matches"]])  # score 10 falls outside the top 10
+        self.assertEqual(r["output_tokens"], 40)
+        self.assertIsNone(r["fallback"])
+        self.assertTrue(all("https://" not in p for _, p, _ in client.prompts))
+        system, prompt, schema = client.prompts[1]
+        self.assertIn(UNTRUSTED, system)
+        self.assertIn(TECH_ONLY, system)
+        self.assertIn("[2] Best — Co B (Seattle, WA)", prompt)
+        self.assertEqual(schema["properties"]["items"]["items"]["required"], ["i", "score", "reason"])
+
+    def test_ties_break_by_newer_posting(self):
+        client = ScriptedClient([scores((1, 70), (2, 70))])
+        self.assertEqual([m["key"] for m in score_all(SCORE_POOL[:2], "", client)["matches"]], ["k0", "k1"])
+
+    def test_missing_item_dropped(self):
+        client = ScriptedClient([scores((1, 80), (2, 70), (4, 60), (99, 90), (2, 10))])
+        r = score_all(SCORE_POOL[:4], BACKEND_RESUME, client)
+        self.assertEqual([m["key"] for m in r["matches"]], ["k0", "k1", "k3"])
+        self.assertTrue(any("k2" in str(t) for t in r["trace"]))
+
+    def test_malformed_reply_items_ignored(self):
+        bad = {"items": ["x", None, {"i": 1, "score": 70, "reason": "ok"}]}
+        r = score_all(SCORE_POOL[:2], BACKEND_RESUME, ScriptedClient([bad]))
+        self.assertEqual([m["key"] for m in r["matches"]], ["k0"])
+        self.assertEqual(score_all(SCORE_POOL[:2], "", ScriptedClient([{"items": "nope"}]))["matches"], [])
+
+    def test_failed_batch_is_skipped(self):
+        client = ScriptedClient([RuntimeError("timeout"), scores((1, 10), (2, 99))])
+        r = score_all(SCORE_POOL, BACKEND_RESUME, client)
+        self.assertEqual([m["key"] for m in r["matches"]], ["best", "k10"])
+        self.assertIsNone(r["fallback"])
+        self.assertTrue(any("timeout" in str(t) for t in r["trace"]))
+
+    def test_all_batches_fail_fall_back(self):
+        client = ScriptedClient([RuntimeError("down"), RuntimeError("down")])
+        r = score_all(SCORE_POOL, BACKEND_RESUME, client)
+        self.assertEqual((r["fallback"], len(r["matches"]), r["calls"]), ("llm_error", 10, 0))
 
 
 class CandidatePool(unittest.TestCase):
