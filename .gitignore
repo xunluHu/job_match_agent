@@ -23,3 +23,13 @@
 !/src/jobmatch_data/sources.py
 !/src/jobmatch_data/storage.py
 !/src/jobmatch_data/webapp.py
+!/src/jobmatch_data/latest_*.py
+!/src/jobmatch_data/latest.html
+!/tests/
+!/tests/**
+!/eval/
+!/eval/**
+!/docs/
+!/docs/superpowers/
+!/docs/superpowers/**
+__pycache__/
