@@ -13,6 +13,9 @@ from urllib.parse import parse_qs, urlsplit
 from .gemini import GeminiClient, load_config
 from .resume_match import ROOT, JobIndex, make_client, match_resume, save_report
 from .resume_optimize import optimize_resume
+from .http import Client
+from .latest_refresh import Refresher
+from .latest_web import LatestFeature, read_json_body
 
 PAGE = Path(__file__).with_name("match.html")
 
@@ -25,7 +28,7 @@ class JobMatchServer(ThreadingHTTPServer):
         super().server_bind()
 
 
-def make_server(index, client, port=8000, output_root=None):
+def make_server(index, client, port=8000, output_root=None, latest=None):
     provider = getattr(client, "provider", "openai")
     output_root = Path(output_root) if output_root else ROOT / "data/matches" / provider
     profile_dir = ROOT / "data/candidates/full_resumes_v1/markdown"
@@ -59,6 +62,9 @@ def make_server(index, client, port=8000, output_root=None):
             if not self.local_request():
                 return self.reply(403, {"error": "Only same-origin local requests are accepted."})
             path = urlsplit(self.path)
+            hit = latest.handle_get(path.path) if latest else None
+            if hit:
+                return self.reply(*hit)
             if path.path == "/":
                 return self.reply(200, PAGE.read_bytes(), "text/html; charset=utf-8")
             if path.path == "/api/status":
@@ -119,6 +125,13 @@ def make_server(index, client, port=8000, output_root=None):
         def do_POST(self):
             if not self.local_request():
                 return self.reply(403, {"error": "Only same-origin local requests are accepted."})
+            if latest and urlsplit(self.path).path.startswith("/api/new/"):
+                try:
+                    payload = read_json_body(self)
+                except ValueError as exc:
+                    return self.reply(400, {"error": str(exc)})
+                hit = latest.handle_post(urlsplit(self.path).path, payload)
+                return self.reply(*hit) if hit else self.reply(404, {"error": "Not found"})
             if self.path not in {"/api/match", "/api/resume-optimize"}:
                 return self.reply(404, {"error": "Not found"})
             if client is None and self.path == "/api/match":
@@ -169,8 +182,12 @@ def serve(args):
         client = make_client(args)
     except ValueError:
         client = None
-    server = make_server(index, client, args.port)
+    data_dir = ROOT / "data"
+    refresher = Refresher(data_dir / "latest_jobs.sqlite3", lambda: Client(data_dir, archive=False))
+    server = make_server(index, client, args.port, latest=LatestFeature(data_dir, client, refresher))
+    refresher.start()
     print(f"JobMatch: http://127.0.0.1:{args.port} ({len(index.jobs)} indexed jobs)", flush=True)
+    print(f"New US jobs: http://127.0.0.1:{args.port}/new (refreshes every 30 minutes)", flush=True)
     if client is None:
         print("No API key found. Configure it and restart the server.", flush=True)
     try:

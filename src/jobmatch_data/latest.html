@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JobMatch | New US jobs</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f5f7;color:#172738;font:15px/1.6 system-ui,Arial,sans-serif}main{max-width:1320px;margin:36px auto;padding:0 24px}h1{font-size:32px;letter-spacing:-1px;margin:0}h2{font-size:21px;margin:0 0 14px}h3{font-size:19px;line-height:1.35;margin:0 0 6px}p{margin:6px 0}.muted{color:#637184}nav{display:flex;gap:16px;margin-bottom:10px;font-size:14px}nav a{color:#176b53}nav b{color:#172738}.grid{display:grid;grid-template-columns:350px minmax(0,1fr);gap:26px;margin-top:24px}.panel,.job{background:#fff;border:1px solid #dce3e9;border-radius:14px;padding:22px}.panel{align-self:start;position:sticky;top:20px}label{display:block;font-weight:600;margin:16px 0 6px}textarea{width:100%;min-height:300px;font:12px/1.6 system-ui,Arial,sans-serif;border:1px solid #cbd5df;border-radius:7px;padding:10px;resize:vertical}fieldset{border:0;padding:0;margin:16px 0 0}legend{font-weight:600;margin-bottom:6px}.choice{display:inline-flex;gap:6px;align-items:center;font-weight:400;margin:0 14px 0 0}button{font:inherit;cursor:pointer;border:0;border-radius:7px;padding:11px 16px;background:#176b53;color:#fff}button:disabled{opacity:.5;cursor:wait}.secondary{background:#e8efeb;color:#176b53;padding:6px 12px}.wide{width:100%;margin-top:14px}#status{font-size:13px;color:#6a7886;margin-top:6px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}ol{list-style:none;padding:0;margin:0}.job{margin:0 0 16px}.score{float:right;background:#e8f4ed;color:#176b53;border-radius:20px;padding:2px 10px;font-weight:650;font-size:13px}a{color:#176b53}.error{color:#a22d30}.empty{padding:64px 20px;text-align:center;border:1px dashed #becad3;border-radius:14px;color:#637184}#footer{font-size:13px;color:#637184;margin-top:8px}@media(max-width:850px){.grid{grid-template-columns:1fr}.panel{position:static}textarea{min-height:200px}main{padding:0 16px}}
+</style>
+<main>
+<nav><a href="/">Archive match</a><b>New US jobs</b></nav>
+<h1>JobMatch <span style="font-weight:400;color:#778491">/ New US jobs</span></h1>
+<div id="status"><span id="statustext">Loading…</span><button id="refresh" class="secondary" type="button">Refresh now</button></div>
+<div class="grid">
+<section class="panel">
+<h2>Your resume</h2>
+<label for="resume">Resume text</label>
+<textarea id="resume" placeholder="Paste your resume, or upload a file below."></textarea>
+<p><button id="choosefile" class="secondary" type="button">Upload PDF, Markdown or text</button><span id="filename" class="muted"></span></p>
+<input id="file" type="file" accept=".pdf,.md,.txt,application/pdf,text/plain,text/markdown" hidden>
+<fieldset><legend>Job type</legend>
+<label class="choice"><input type="radio" name="jobtype" value="intern">Internships</label>
+<label class="choice"><input type="radio" name="jobtype" value="fulltime">Full-time</label>
+<label class="choice"><input type="radio" name="jobtype" value="both" checked>Both</label>
+</fieldset>
+<label class="choice" style="margin-top:14px"><input id="sponsor" type="checkbox">I need visa sponsorship</label>
+<button id="save" class="wide" type="button">Save resume</button>
+<p id="saved" class="muted"></p>
+<p id="notice" class="muted"></p>
+</section>
+<section>
+<button id="find" type="button">Find new jobs</button>
+<p class="muted">Ranks recent US postings by technical fit with your saved resume. Degree, experience and visa notes are shown but not scored.</p>
+<ol id="results"><li class="empty">Save your resume, then select Find new jobs.</li></ol>
+<div id="footer"></div>
+</section>
+</div>
+</main>
+<script type="module">
+const $=id=>document.getElementById(id);
+const el=(tag,text,cls)=>{const node=document.createElement(tag);if(text!=null)node.textContent=text;if(cls)node.className=cls;return node;};
+async function api(path,body){
+  const response=await fetch(path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const data=await response.json().catch(()=>({error:'Unexpected server response.'}));
+  if(!response.ok)throw Error(data.error||('Request failed with status '+response.status));
+  return data;
+}
+function notice(text,isError){$('notice').className=isError?'error':'muted';$('notice').textContent=text||'';}
+
+const PDFJS='https://cdn.jsdelivr.net/npm/pdfjs-dist@6.5.438/build/';
+async function pdfText(file){
+  // Loaded only when a PDF is chosen; the file is parsed in this browser and never uploaded.
+  const pdfjs=await import(PDFJS+'pdf.min.mjs').catch(()=>{throw Error('The PDF reader could not be loaded. Check your internet connection.');});
+  pdfjs.GlobalWorkerOptions.workerSrc=PDFJS+'pdf.worker.min.mjs';
+  const task=pdfjs.getDocument({data:await file.arrayBuffer()});
+  try{
+    const pdf=await task.promise,pages=[];
+    for(let n=1;n<=pdf.numPages;n++){
+      const {items}=await (await pdf.getPage(n)).getTextContent();
+      pages.push(items.map(item=>item.str+(item.hasEOL?'\n':'')).join(''));
+    }
+    return pages.join('\n\n');
+  }finally{task.destroy();}
+}
+$('choosefile').onclick=()=>$('file').click();
+$('file').onchange=async()=>{
+  const file=$('file').files[0];if(!file)return;
+  const isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
+  notice('');
+  if(file.size>(isPdf?10e6:300000)){notice(isPdf?'Use a PDF smaller than 10 MB.':'Use a resume file smaller than 300 KB.',true);return;}
+  try{
+    if(isPdf)notice('Reading PDF…');
+    const text=isPdf?await pdfText(file):await file.text();
+    if(isPdf&&text.trim().length<150)throw Error('No selectable text was found. The PDF may be a scanned image.');
+    $('resume').value=text;$('filename').textContent=' '+file.name;
+    if(isPdf)notice('Text extracted from the PDF. Check it, then select Save resume.');
+  }catch(e){notice('Could not read this file. '+e.message+' Paste the resume text instead.',true);}
+  finally{$('file').value='';}
+};
+
+const DEGREE={bachelor:'Bachelor',master:'Master',doctorate:'PhD',associate:'Associate'};
+const VISA={no_sponsorship:'JD says no sponsorship',citizenship_required:'Citizenship or clearance required',not_mentioned:'Not mentioned'};
+const degreeText=list=>list&&list.length?list.map(d=>(DEGREE[d.level]||d.level)+' ('+d.priority+')').join(', '):'Not stated';
+const yearsText=n=>n==null?'Not stated':n+'+ years';
+const ago=posted=>{const days=Math.floor((Date.now()/1000-posted)/86400);return days<1?'today':days===1?'1 day ago':days+' days ago';};
+const safeUrl=url=>{try{const u=new URL(url);return u.protocol==='https:'||u.protocol==='http:'?u.href:null;}catch{return null;}};
+
+function render(data){
+  const list=$('results');list.replaceChildren();
+  if(!data.results.length)list.append(el('li','No jobs matched.','empty'));
+  for(const job of data.results){
+    const card=el('li',null,'job');
+    card.append(el('span',job.score+'/100','score'));
+    card.append(el('h3',job.rank+'. '+job.title+' — '+job.company+' · '+(job.locations.join('; ')||'US')+' · '+ago(job.posted)));
+    card.append(el('p','Degree: '+degreeText(job.degree)+'  ·  Experience: '+yearsText(job.min_years)+'  ·  Visa: '+(VISA[job.visa]||'Not stated')));
+    card.append(el('p','Skills: '+(job.skills.length?job.skills.join(', '):'None matched')));
+    card.append(el('p','Why: '+job.reason));
+    const url=safeUrl(job.url);
+    if(url){const link=el('a','View posting ↗');link.href=url;link.target='_blank';link.rel='noopener noreferrer';const p=el('p');p.append(link);card.append(p);}
+    list.append(card);
+  }
+  const footer=$('footer');footer.replaceChildren();
+  if(data.counts&&data.counts.no_jd)footer.append(el('p',data.counts.no_jd+' more US jobs from the last 7 days have no public description and were not ranked.'));
+  footer.append(el('p',data.method+' · '+data.calls+' LLM calls · '+(data.input_tokens+data.output_tokens)+' tokens · pool of '+data.pool_size+' jobs from the last '+data.days+' days'));
+  if(data.note)footer.append(el('p',data.note));
+}
+
+let polling=null;
+async function loadStatus(){
+  try{
+    const s=await api('/api/new/status'),c=s.counts,r=s.refresh||{};
+    const updated=r.last_refresh?'Jobs updated '+Math.max(0,Math.round((Date.now()/1000-r.last_refresh)/60))+' min ago':'Jobs not refreshed yet';
+    let text=updated+' · '+c.total+' US jobs in 7 days · '+c.with_jd+' with descriptions · '+c.pending+' pending';
+    if(r.running)text+=' · Refreshing…';
+    if(r.last_error)text+=' · Last refresh failed: '+r.last_error;
+    if(!s.llm_configured)text+=' · No LLM configured (keyword ranking)';
+    $('statustext').textContent=text;
+    $('refresh').disabled=!!r.running;
+    if(r.running&&!polling)polling=setInterval(loadStatus,5000);
+    if(!r.running&&polling){clearInterval(polling);polling=null;}
+  }catch(e){$('statustext').textContent='Status unavailable: '+e.message;}
+}
+$('refresh').onclick=async()=>{
+  try{const r=await api('/api/new/refresh',{});if(!r.started)notice('A refresh is already running or not available.');}
+  catch(e){notice(e.message,true);}
+  setTimeout(loadStatus,300);
+};
+
+async function find(){
+  $('find').disabled=true;notice('Finding new jobs… The agent may take a minute.');
+  try{render(await api('/api/new/match',{}));notice('');}
+  catch(e){notice(e.message,true);}
+  finally{$('find').disabled=false;loadStatus();}
+}
+$('find').onclick=find;
+$('save').onclick=async()=>{
+  $('save').disabled=true;
+  try{
+    const jobType=document.querySelector('input[name="jobtype"]:checked').value;
+    const p=await api('/api/new/profile',{resume:$('resume').value,job_type:jobType,needs_sponsorship:$('sponsor').checked});
+    $('saved').textContent='Saved '+new Date(p.updated_at*1000).toLocaleString();
+    await find();
+  }catch(e){notice(e.message,true);}
+  finally{$('save').disabled=false;}
+};
+
+(async()=>{
+  loadStatus();
+  try{
+    const p=await api('/api/new/profile');
+    if(p.resume){
+      $('resume').value=p.resume;$('sponsor').checked=!!p.needs_sponsorship;
+      const radio=document.querySelector('input[name="jobtype"][value="'+p.job_type+'"]');if(radio)radio.checked=true;
+      $('saved').textContent='Saved '+new Date(p.updated_at*1000).toLocaleString();
+    }
+  }catch(e){notice(e.message,true);}
+  try{render(await api('/api/new/last'));}catch{}
+})();
+</script>
+</html>

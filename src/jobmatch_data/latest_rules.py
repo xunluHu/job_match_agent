@@ -92,7 +92,12 @@ def visa_note(jd, sponsorship):
 
 def job_fields(title, jd, sponsorship):
     profile = job_profile(title, list(sections(jd)))
-    return {"degree": [{"level": d["level"], "priority": d["priority"]} for d in profile["degree_requirements"]],
+    strength = {"required": 2, "preferred": 1}
+    degree = {}  # one entry per level, keeping the strongest priority, in first-seen order
+    for d in profile["degree_requirements"]:
+        if strength.get(d["priority"], 0) >= strength.get(degree.get(d["level"], ""), 0):
+            degree[d["level"]] = d["priority"]
+    return {"degree": [{"level": level, "priority": priority} for level, priority in degree.items()],
             "min_years": profile["min_years"], "visa": visa_note(jd, sponsorship)}
 
 

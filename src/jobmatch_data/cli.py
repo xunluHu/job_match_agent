@@ -42,6 +42,8 @@ def main():
     local.add_argument("file", type=Path)
     local.add_argument("--source", required=True)
     local.add_argument("--data-dir", type=Path, default=Path("data"))
+    latest = commands.add_parser("latest-refresh", help="Refresh recent US postings for New US jobs once")
+    latest.add_argument("--data-dir", type=Path, default=Path("data"))
     for command in ("stats", "export"):
         sub = commands.add_parser(command)
         sub.add_argument("--data-dir", type=Path, default=Path("data"))
@@ -61,6 +63,11 @@ def main():
                 parser.exit(1, "Collection partially failed; see run manifest.\n")
         elif args.command == "import":
             print(f"Imported {ingest(args.file, args.source, args.data_dir)} records")
+        elif args.command == "latest-refresh":
+            from .http import Client
+            from .latest_refresh import refresh
+            report = refresh(args.data_dir / "latest_jobs.sqlite3", Client(args.data_dir, archive=False))
+            print(json.dumps(report, ensure_ascii=False, indent=2))
         elif args.command == "stats":
             print(json.dumps(summarize(args.data_dir), ensure_ascii=False, indent=2))
         else:

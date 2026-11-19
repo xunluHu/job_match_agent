@@ -60,6 +60,12 @@ class LatestRules(unittest.TestCase):
         # Known limit of job_profile: lines containing "or" are skipped.
         self.assertIsNone(job_fields("X", "Requirements:\n5+ years of experience with Python or Go", None)["min_years"])
 
+    def test_job_fields_dedups_degree_levels(self):
+        jd = ("Requirements:\nMaster's degree preferred\nBachelor's degree in Computer Science required\n"
+              "Master's degree in Computer Science required")
+        self.assertEqual(job_fields("SWE", jd, None)["degree"],
+                         [{"level": "master", "priority": "required"}, {"level": "bachelor", "priority": "required"}])
+
     def test_matched_skills(self):
         self.assertEqual(matched_skills("Built FastAPI services on PostgreSQL with Docker",
                                         "We use Python, FastAPI, Docker and Kubernetes"), ["FastAPI", "Docker"])
