@@ -8,9 +8,15 @@ from jobmatch_data.latest_eval import snapshot
 from jobmatch_data.latest_rankers import candidate_pool
 from jobmatch_data.latest_rules import listing_rows
 from jobmatch_data.latest_store import save_jd, set_meta, sync_listings
-from jobmatch_data.latest_tasks import (STANDARD_RUBRIC, consistency, grade, load_tasks, p95, read_rows, run,
-                                        show_trace, summarize, to_markdown)
+from jobmatch_data.latest_tasks import (STANDARD_RUBRIC, consistency, grade, load_archive_tasks, load_tasks, p95,
+                                        read_rows, run, show_trace, summarize, to_markdown)
+from jobmatch_data.resume_match import JobIndex
+from jobmatch_data.storage import save
 from tests.fakes import ScriptedClient, listing
+from tests.test_archive_agent import Router
+from tests.test_archive_agent import act as archive_act
+from tests.test_existing_regression import JOBS
+from tests.test_existing_regression import RESUME as ARCHIVE_RESUME
 
 THEN = time.time() - 30 * 86400
 RESUME = ("## Summary\nBackend engineer building Python services with FastAPI and PostgreSQL.\n"
@@ -154,6 +160,73 @@ class LatestTasks(unittest.TestCase):
         # A later row for the same run replaces an earlier one (a rerun after an LLM-error fallback).
         rows = [row("a", False), dict(row("a", True), seconds=9.0)]
         self.assertEqual(summarize(rows)["main"][0]["accuracy"], 1)
+
+
+class ArchiveTasks(unittest.TestCase):
+    """The same harness on Archive match: pipeline (classic RAG) against the agent, keys are source|source_id."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        save(JOBS, "test", self.tmp)
+        self.snap = self.tmp / "jobs.sqlite3"
+        self.tasks = [
+            {"id": "a01", "type": "exact", "question": ARCHIVE_RESUME, "expected": ["test|1"]},
+            {"id": "a02", "type": "tool", "question": ARCHIVE_RESUME,
+             "expected_call": {"name": "search_jobs", "query_any": ["fastapi"]}},
+            {"id": "a03", "type": "rubric", "question": ARCHIVE_RESUME, "rubric": ["Backend roles first."],
+             "forbidden": ["test|2"], "within": 1},
+        ]
+        self.file = self.tmp / "archive_tasks.jsonl"
+        self.file.write_text("".join(json.dumps(t) + "\n" for t in self.tasks), encoding="utf-8")
+
+    def agent_script(self, runs):
+        three = archive_act("submit", job_ids=["J001", "J002", "J003"])
+        return [archive_act("search_jobs", query="FastAPI Python"), three] * runs
+
+    def test_archive_run_grades_pipeline_and_agent(self):
+        tasks = load_archive_tasks(self.file, JobIndex(self.snap))
+        out = self.tmp / "results.jsonl"
+        failed = run(tasks, self.snap, ["pipeline", "agent"], 2, Router(self.agent_script(6)),
+                     ScriptedClient([all_pass] * 3), out, workers=1, system="archive")
+        self.assertEqual(failed, 0)
+        rows = {(r["id"], r["method"], r["repeat"]): r for r in read_rows(out)}
+        self.assertEqual(len(rows), 3 * 3)
+        self.assertTrue(rows["a01", "pipeline", 0]["passed"])
+        self.assertTrue(rows["a01", "agent", 1]["passed"])
+        self.assertEqual(rows["a02", "pipeline", 0]["detail"], "no tool calls (non-agentic method)")
+        self.assertEqual(rows["a02", "agent", 0]["detail"], "first search: 'FastAPI Python'")
+        self.assertEqual((rows["a01", "pipeline", 0]["calls"], rows["a01", "agent", 0]["calls"]), (1, 3))
+        self.assertEqual(rows["a01", "agent", 0]["ids"]["J001"], "test|1")
+        self.assertEqual(rows["a01", "agent", 0]["system"], "archive")
+        text = to_markdown(summarize(read_rows(out)))
+        self.assertIn("| pipeline |", text)
+        self.assertIn("archive", text)
+        self.assertIn("search_jobs", show_trace(read_rows(out), "a02"))
+
+    def test_scoring_failure_is_a_failed_answer(self):
+        class BrokenScorer(Router):
+            def generate(self, system, prompt, schema):
+                if "action" not in schema.get("properties", {}):
+                    raise ValueError("The model returned an unknown job reference.")
+                return super().generate(system, prompt, schema)
+
+        tasks = load_archive_tasks(self.file, JobIndex(self.snap))[:1]
+        out = self.tmp / "broken.jsonl"
+        self.assertEqual(run(tasks, self.snap, ["pipeline"], 1, BrokenScorer([]), None, out, workers=1,
+                             system="archive"), 0)
+        row = read_rows(out)[0]
+        self.assertFalse(row["passed"])
+        self.assertEqual(row["detail"], "no answer: The model returned an unknown job reference.")
+
+    def test_archive_tasks_validate_keys_and_types(self):
+        index = JobIndex(self.snap)
+        for task in (dict(self.tasks[0], expected=["test|99"]),
+                     {"id": "a09", "type": "unanswerable", "question": ARCHIVE_RESUME, "rubric": ["declines"]}):
+            self.file.write_text(json.dumps(task) + "\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_archive_tasks(self.file, index)
 
 
 if __name__ == "__main__":

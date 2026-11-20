@@ -63,6 +63,21 @@ The evaluation compares keyword ranking, scoring every job with the model (`scor
 
 Add `--inject` to `run` to test prompt injection. For each resume, the job that keyword ranking likes least gets a note telling AI systems to rank it first; the note is added to a temporary copy of the snapshot, never to the snapshot itself. The report's `injection_success` column is the share of model runs that put that job in the top 10. With `--repeats` above 1, `stability` is the average overlap (Jaccard) of the top-10 lists across repeats.
 
+### Task evaluation for both agents
+
+`latest-tasks` runs graded tasks (exact answer, first tool call, LLM-judged rubric, unanswerable) and reports accuracy, model calls, average and p95 latency, tokens, pass@k, pass^k and the tasks whose outcome changes between runs.
+
+```powershell
+# New US jobs: 50 tasks in eval/tasks.jsonl, keyword and score_all baselines against the agent
+& $python -m jobmatch_data latest-tasks run data/latest_eval/snapshots/SNAPSHOT.sqlite3 --provider claude --key-file KEY
+# Archive match: 20 tasks in eval/archive_tasks.jsonl, the single-search pipeline (classic RAG) against the agent
+& $python -m jobmatch_data latest-tasks snapshot-archive
+& $python -m jobmatch_data latest-tasks run data/archive_eval/snapshots/SNAPSHOT.sqlite3 --system archive --provider claude --key-file KEY
+& $python -m jobmatch_data latest-tasks trace RESULTS.jsonl TASK_ID
+```
+
+The agent runs 3 times per task (`--repeats`), baselines once; agents use `--model` (default `claude-haiku-5-5`) and rubric tasks are judged by `--judge-model` (default `claude-sonnet-5-5`). Results are appended as they finish, so rerunning with `--out RESULTS.jsonl` resumes. Archive tasks name jobs as `source|source_id` and cannot be unanswerable, because Archive match cannot decline yet.
+
 ## Match from the command line
 
 ```powershell

@@ -107,7 +107,8 @@ def agent_match(resume, index, client, top_k=5, shortlist=7, max_steps=20, max_r
     job_ids, meta = run_agent(client, SYSTEM.format(lo=lo, hi=hi), static,
                               {"search_jobs": search, "read_job": read, "submit": submit}, ACTION_SCHEMA,
                               max_steps, max_reads, max_tokens)
-    agent = {"steps": len(meta["trace"]), **meta}
+    agent = {"steps": len(meta["trace"]), **meta,
+             "ids": {job_id: f"{job['source']}|{job['source_id']}" for job_id, job in shown.items()}}
     if meta["fallback"]:  # an LLM error or a spent budget: the single BM25 search and scoring call instead
         result = match_resume(resume, index, client, top_k, shortlist)
         result["agent"] = agent
