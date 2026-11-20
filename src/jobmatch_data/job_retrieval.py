@@ -117,19 +117,22 @@ class SectionSearch:
                     self.passage_count += 1
                     yield " ".join(map(fts_term, words)), i, section, body
 
-    def retrieve(self, resume, jobs, limit):
+    def retrieve(self, resume, jobs, limit, query=None):
+        """Search with the resume's own terms, or with `query` (an agent's search words); screening uses the resume."""
         profile, focus = candidate_profile(resume)
         focus_terms = set(terms(focus))
+        searched = query
 
         def query_weight(word, count):
             priority = 2 if word in focus_terms else 1
             return priority * math.log1p(min(count, 3)) * math.log1p(self.passage_count / self.df[word])
 
-        weights = {word: query_weight(word, count) for word, count in Counter(terms(resume)).items()
+        weights = {word: query_weight(word, count) for word, count in Counter(terms(searched or resume)).items()
                    if self.df[word]}
         technical = [word for word in weights if word in TECHNICAL_TERMS]
         focused = [word for word in technical if word in focus_terms]
-        pool = focused if len(focused) >= 4 else technical if len(technical) >= 3 else weights
+        # Search words are already chosen; only a whole resume needs narrowing to its technical terms.
+        pool = weights if searched else focused if len(focused) >= 4 else technical if len(technical) >= 3 else weights
         query = sorted(pool, key=lambda word: (-weights[word], word))[:12]
         expression = " OR ".join(fts_term(word) for word in query)
         recalled, matched_jobs = {}, set()

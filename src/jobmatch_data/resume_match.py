@@ -179,8 +179,8 @@ class JobIndex:
     def search(self, resume, limit=12):
         return self.retrieve(resume, limit)[0]
 
-    def retrieve(self, resume, limit=12):
-        return self.sections.retrieve(resume, self.jobs, limit)
+    def retrieve(self, resume, limit=12, query=None):
+        return self.sections.retrieve(resume, self.jobs, limit, query)
 
 
 def canonical(text):
@@ -238,6 +238,11 @@ def match_resume(resume, index, client, top_k=5, shortlist=12):
         jobs = index.search(resume, shortlist)
     if not jobs:
         raise ValueError("No related jobs were retrieved.")
+    return score_shortlist(resume, jobs, retrieval, index, client, top_k, started)
+
+
+def score_shortlist(resume, jobs, retrieval, index, client, top_k, started):
+    """Score a shortlist with one model call: source references, capability radar and screening order."""
     compact = getattr(client, "compact", False)
     full_jobs = retrieval is not None
     reference_mode = full_jobs or compact
