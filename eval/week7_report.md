@@ -24,10 +24,11 @@ Team: Wenjie Hu (wenjiehu) · Fanpu Cong (fcong)
 - `latest_tasks.py`: the evaluation script, `src/jobmatch_data/latest_tasks.py` in our `jobmatch_data` package. One command runs both methods on every task, and runs the agent 3 times:
 
 ```
-python -m jobmatch_data latest-tasks run data/archive_eval/snapshots/20261120-0650.sqlite3 --system archive --tasks tasks.jsonl --provider claude --key-file KEY
+python -m jobmatch_data latest-tasks run data/archive_eval/snapshots/20261120-0650.sqlite3 \
+  --system archive --tasks tasks.jsonl --provider claude --key-file KEY
 ```
 
-- `week7_report.md`, this report:
+- `week7_report.md`, this report, and `week7_report.pdf`, the same report as a PDF:
   - the results table, with pass@3 and pass^3 (see Results)
   - the failure paragraph (see Failure trace)
 - `week7-archive-final.md`: the summary the script wrote for the final run. The per-run records (`week7-archive-final.jsonl`, 1.1 MB) are available on request.
