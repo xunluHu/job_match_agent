@@ -30,6 +30,7 @@ python -m jobmatch_data latest-tasks run data/archive_eval/snapshots/20261120-06
 - `week7_report.md`, this report:
   - the results table, with pass@3 and pass^3 (see Results)
   - the failure paragraph (see Failure trace)
+- `week7-archive-final.md`: the summary the script wrote for the final run. The per-run records (`week7-archive-final.jsonl`, 1.1 MB) are available on request.
 
 ## Tasks
 
