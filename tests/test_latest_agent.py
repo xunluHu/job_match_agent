@@ -118,6 +118,14 @@ class LatestAgent(unittest.TestCase):
         self.assertNotIn("last step", client.prompts[0][1].lower())
         self.assertIn("last step", client.prompts[1][1].lower())
 
+    def test_empty_submit_declines(self):
+        client = ScriptedClient([act("search_jobs", query="pastry"), submit([])])
+        r = agent_rank(POOL12, "Pastry chef. " * 20, client)
+        self.assertIn("submit an empty items list", client.prompts[0][0])
+        self.assertEqual(r["matches"], [])
+        self.assertIsNone(r["fallback"])
+        self.assertEqual(r["trace"][-1]["thought"], "t")
+
     def test_small_pool_submits_all(self):
         client = ScriptedClient([submit(["J001", "J002", "J003"])])
         r = agent_rank(POOL12[:3], RESUME, client)
@@ -128,6 +136,7 @@ class LatestAgent(unittest.TestCase):
         ids = {"J001": "a", "J002": "b"}
         good = [{"job_id": "J001", "score": 90, "reason": "Fit."}, {"job_id": "J002", "score": 0, "reason": "Ok."}]
         self.assertEqual(validate_submit(good, ids, 2), [])
+        self.assertEqual(validate_submit([], ids, 2), [])                   # declining is allowed
         bad_cases = [
             good[:1],                                                       # wrong count
             [good[0], dict(good[1], job_id="J001")],                        # duplicate

@@ -8,7 +8,8 @@ SYSTEM = (f"You rank recent US job postings for one candidate. {UNTRUSTED} {TECH
           "Use only job ids shown to you (like J007). Respond with exactly one action per turn. "
           "Use search_jobs to find jobs whose descriptions match a query, and read_job to read a description "
           "before you rank a job highly. "
-          "Submit exactly {n} distinct jobs, best first, each with a 0-100 score and a one-sentence reason.")
+          "Submit exactly {n} distinct jobs, best first, each with a 0-100 score and a one-sentence reason. "
+          "If no job in the catalog fits the candidate's field at all, submit an empty items list instead.")
 
 ACTION_SCHEMA = {
     "type": "object", "additionalProperties": False,
@@ -32,7 +33,8 @@ OLD_READ_CHARS = 200
 def validate_submit(items, ids, n):
     if not isinstance(items, list):
         return ["items must be a list."]
-    errors = [] if len(items) == n else [f"Submit exactly {n} jobs; you sent {len(items)}."]
+    # An empty list is the agent declining: nothing in the catalog fits the candidate's field.
+    errors = [] if len(items) in (0, n) else [f"Submit exactly {n} jobs, or none if nothing fits; you sent {len(items)}."]
     seen = set()
     for number, item in enumerate(items, 1):
         if not isinstance(item, dict):
@@ -128,7 +130,7 @@ def agent_rank(pool, resume, client, n=10, max_steps=40, max_reads=30, max_token
             errors = validate_submit(items, ids, n)
             args = {"items": len(items) if isinstance(items, list) else 0}
             if not errors:
-                trace.append({"step": step, "action": kind, "args": args, "error": None})
+                trace.append({"step": step, "action": kind, "args": args, "error": None, "thought": thought})
                 matches = [{"key": ids[i["job_id"]], "score": i["score"], "reason": i["reason"].strip()} for i in items]
                 return result(matches, calls, input_tokens, output_tokens, trace, None)
             error = "; ".join(errors)
@@ -137,7 +139,7 @@ def agent_rank(pool, resume, client, n=10, max_steps=40, max_reads=30, max_token
         else:
             error = observation = "Unknown action. Use search_jobs, read_job or submit."
             header = f"Step {step}: invalid action"
-        trace.append({"step": step, "action": kind, "args": args, "error": error})
+        trace.append({"step": step, "action": kind, "args": args, "error": error, "thought": thought})
         history.append((f"Thought: {thought}\n{header}" if thought else header, observation, is_read))
         if input_tokens + output_tokens > max_tokens:
             return fall_back("token_budget")
