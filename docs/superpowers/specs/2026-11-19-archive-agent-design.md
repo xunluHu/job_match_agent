@@ -56,7 +56,7 @@ Archive 库有 2,228 个带 JD 的职位，一次检索没命中的职位进不�
 
 - `SectionSearch.retrieve` 加一个可选参数 `query`：给了就按这段文字算检索词权重，不给就和现在一样从简历里挑。资格筛选仍按简历做。现有调用不受影响。
 - `match_resume` 拆成两段：检索 + `score_shortlist(resume, jobs, retrieval, client, top_k)`。原流水线 = 检索 + 打分；agent = agent 名单 + 同一个打分。打分代码一行不改，只是挪进函数。
-- 结果里加：`method` 写成 `agent_bm25_then_<provider>`；新增 `agent` 字段（步数、调用次数、token、每步记录、是否兜底）；`usage` 合计 agent 和打分两部分的 token。
+- 结果里加：`method` 写成 `agent_bm25_then_<provider>`；新增 `agent` 字段（步数、调用次数、token、每步记录、是否兜底）。`usage` 仍是打分那一次调用的（三家模型的 usage 格式不同，硬加容易出错），agent 的 token 记在 `agent` 字段里，网页一起显示。
 - `retrieval` 字段在 agent 模式下记录：搜索词列表（每次命中几个）、候选名单、资格画像。
 
 ### 入口
