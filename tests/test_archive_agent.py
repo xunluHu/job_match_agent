@@ -57,6 +57,13 @@ class RetrievalAndScoring(ArchiveBase):
         self.assertIn("airflow", retrieval["query_terms"])
         self.assertEqual(retrieval["candidate_profile"], self.index.retrieve(RESUME, 3)[1]["candidate_profile"])
 
+    def test_query_results_follow_relevance_not_screening(self):
+        # All three jobs mention Python; the backend resume screens Backend Engineer first, but the query is about data.
+        results, _ = self.index.retrieve(RESUME, 3, query="Airflow Snowflake Python")
+        self.assertEqual(results[0]["title"], "Data Engineer")
+        self.assertEqual(self.index.retrieve(RESUME, 3, query="FastAPI Kubernetes Python")[0][0]["title"],
+                         "Backend Engineer")
+
     def test_retrieve_without_query_is_unchanged(self):
         self.assertEqual(self.index.retrieve(RESUME, 3), self.index.sections.retrieve(RESUME, self.index.jobs, 3))
 

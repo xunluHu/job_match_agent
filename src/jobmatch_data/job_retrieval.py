@@ -153,7 +153,10 @@ class SectionSearch:
                     if len(hits) <= 50:
                         bm25_companies[jobs[index]["company"]] += 1
                 urls, postings = set(), {}
-                for index, rowid, score, screen in sorted(hits, key=lambda item: screening_order(item[3])):
+                # An agent's search keeps BM25 order so different words find different jobs; screening still shows
+                # on every hit and orders the final matches. A resume search keeps the screening-first order.
+                ordered = hits if searched else sorted(hits, key=lambda item: screening_order(item[3]))
+                for index, rowid, score, screen in ordered:
                     if len(recalled) >= max(35, limit):
                         break
                     job = jobs[index]
