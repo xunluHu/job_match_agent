@@ -202,7 +202,7 @@ class ArchiveTasks(unittest.TestCase):
         self.assertEqual(failed, 0)
         rows = {(r["id"], r["method"], r["repeat"]): r for r in read_rows(out)}
         self.assertEqual(len(rows), 3 * 3)
-        self.assertTrue(rows["a01", "pipeline", 0]["passed"])
+        self.assertEqual(rows["a01", "pipeline", 0]["detail"], "expected job(s) in the top 5")  # archive returns top_k = 5
         self.assertTrue(rows["a01", "agent", 1]["passed"])
         self.assertEqual(rows["a02", "pipeline", 0]["detail"], "no tool calls (non-agentic method)")
         self.assertEqual(rows["a02", "agent", 0]["detail"], "first search: 'FastAPI Python'")

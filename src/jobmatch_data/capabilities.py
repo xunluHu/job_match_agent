@@ -33,6 +33,10 @@ def resolve_capabilities(items, resume_map, job_map):
         for level, ref, mapping, quote in (("candidate_level", "resume_ref", resume_map, "resume_quote"),
                                             ("required_level", "job_evidence_ref", job_map, "job_quote")):
             value, reference = item.get(level), item.get(ref)
+            if value is not None and reference is None:
+                # The mirror case: a level with no source is unsupported, so it is shown as unknown, not as a score.
+                item.setdefault("normalizations", []).append(f"cleared_{level}_without_{ref}")
+                value = None
             if value is None:
                 # A source can discuss a topic without establishing a proficiency level.
                 # Discard the redundant reference; never infer a score from its presence.

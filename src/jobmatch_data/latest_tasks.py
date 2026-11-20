@@ -213,7 +213,8 @@ def run_archive_task(task, method, repeat, index, pool, client, judge, meta):
     if error:
         verdict = (False, f"no answer: {error}", 0)
     else:
-        verdict = grade(task, ranked, pool, clean_resume(task["question"]), judge, us_only=False, count=top_k)
+        verdict = grade({"within": top_k, **task}, ranked, pool, clean_resume(task["question"]), judge, us_only=False,
+                        count=top_k)  # archive returns top_k jobs, so "within" defaults to top_k
     return _row(task, method, repeat, ranked, seconds, verdict, violations(ranked["matches"], pool, False), meta,
                 ids=agent.get("ids"))
 
