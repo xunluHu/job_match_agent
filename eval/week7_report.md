@@ -77,6 +77,12 @@ The agent made no invalid tool calls in its 150 runs, broke no constraints, and 
 - Tool tasks apply only to the agent: the pipeline makes no tool calls. They count as failures in "all 50" and are left out of "no tool tasks".
 - "Turns" counts model calls per task, including a retried scoring call.
 - Judge tokens (525k for the whole run) are not counted in the table.
+- **Judge limitations.** The lecture lists three practices we have not yet followed:
+  - Use a judge from a different model family. Our judge is from the same family as the agent's model. It grades both methods, so the comparison stays fair, but the absolute rubric scores may be inflated.
+  - Set the judge's temperature to 0.
+  - Hand-label about 50 verdicts and report the percentage agreement with the judge.
+
+  We plan to do all three before the 200-task version.
 
 ## Reading the results
 
@@ -126,6 +132,8 @@ An earlier pilot of 4 tasks had found a fourth problem, a product bug. Haiku som
 ```
 python -m jobmatch_data latest-tasks trace data/archive_eval/tasks/week7-archive-final.jsonl a34
 ```
+
+**In one paragraph.** Task a34 gives a long resume. The candidate's only relevant experience, UAS flight test, starts at character 6,306, after pages of coursework, and the expected posting is Aevex Aerospace's Flight Test Engineer 3. The agent failed it in all 3 runs, and the step that went wrong is its first `search_jobs`, before any posting had been read. The agent receives only the first 6,000 characters of the resume, so it never saw the flight test experience. Every search it wrote targeted coursework ("structural load calculations MATLAB…", "entry level engineering intern CAD SolidWorks…"), the Aevex posting never appeared in a result, and the shortlist it submitted held only intern roles. The scoring call, which reads the whole resume, even cited the candidate's flight test work in one reason, but it can only score what the agent shortlisted. The root cause is that the agent and the scoring call see different amounts of the resume; the fix is to give the agent the whole resume, or the experience section first.
 
 **The task.** a34 is an exact task with a long resume. The candidate's only relevant experience, UAS flight test, starts at character 6,306, after pages of generic coursework and volunteering. The expected posting is Aevex Aerospace's Flight Test Engineer 3.
 
