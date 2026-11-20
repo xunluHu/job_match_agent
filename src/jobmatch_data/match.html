@@ -13,8 +13,9 @@
 </style></head><body><main>
 <p style="margin:0 0 10px;font-size:14px"><a href="/new">New US jobs →</a></p><h1>JobMatch <span style="font-weight:400;color:#778491">/ Find your next role</span></h1><div id="status">Loading job index…</div>
 <div class="grid"><section class="panel"><h2 id="input-title">Your resume</h2>
+<p class="small">PDF text is extracted in your browser. Review it below before matching.</p>
 <label for="sample">Resume library</label><select id="sample"><option value="">Select a resume</option></select>
-<label for="choosefile">Upload PDF, Markdown or text</label><input id="file" type="file" accept=".pdf,.md,.txt,application/pdf,text/plain,text/markdown" hidden><button id="choosefile" class="secondary" type="button">Choose file</button><span id="filename" class="small"> No file selected</span>
+<label for="choosefile">Upload PDF, Markdown or text</label><input id="file" type="file" accept=".pdf,.md,.txt,application/pdf,text/plain,text/markdown" hidden><button id="choosefile" class="secondary" type="button">Upload PDF, Markdown or text</button><span id="filename" class="small"> No file selected</span>
 <label id="text-label" for="resume">Experience, projects and skills</label><textarea id="resume" placeholder="Paste your resume here…"></textarea>
 <label for="count">Recommendations</label><select id="count"><option value="5" selected>Top 5 jobs</option><option value="3">Top 3 jobs</option><option value="1">Top 1 job</option></select>
 <button id="match">Find matching jobs</button><p class="small" style="margin-top:12px">Search runs locally. The model analyzes selected resume excerpts and the full job descriptions on the shortlist.</p>
@@ -231,20 +232,9 @@ if(job.capabilities?.length){if(job.radar_svg){const img=node('img');img.classNa
 const detail=node('details');detail.append(node('summary','Match evidence'));for(const ev of job.evidence){detail.append(node('h4',ev.requirement),node('div','Resume','small'),node('blockquote',ev.resume_quote),node('div','Job posting','small'),node('blockquote',ev.job_quote));}card.append(detail);list(card,'Gaps to investigate',job.gaps);list(card,'Conditions to verify',job.uncertainties);cards.append(card);});}
 $('sample').onchange=async()=>{if(!$('sample').value)return;try{$('resume').value=(await api('/api/resume?id='+encodeURIComponent($('sample').value))).text;}catch(e){$('notice').textContent=e.message;}};
 $('choosefile').onclick=()=>$('file').click();
-const PDFJS='https://cdn.jsdelivr.net/npm/pdfjs-dist@6.5.438/build/';
 async function pdfText(file){
-  // Loaded only when a PDF is chosen; the file is parsed in this browser and never uploaded.
-  const pdfjs=await import(PDFJS+'pdf.min.mjs').catch(()=>{throw Error('The PDF reader could not be loaded. Check your internet connection.');});
-  pdfjs.GlobalWorkerOptions.workerSrc=PDFJS+'pdf.worker.min.mjs';
-  const task=pdfjs.getDocument({data:await file.arrayBuffer()});
-  try{
-    const pdf=await task.promise,pages=[];
-    for(let n=1;n<=pdf.numPages;n++){
-      const {items}=await (await pdf.getPage(n)).getTextContent();
-      pages.push(items.map(item=>item.str+(item.hasEOL?'\n':'')).join(''));
-    }
-    return pages.join('\n\n');
-  }finally{task.destroy();}
+  const reader=await import('/assets/resume-pdf.mjs');
+  return reader.pdfText(file);
 }
 $('file').onchange=async()=>{
   const file=$('file').files[0];if(!file)return;
@@ -252,13 +242,15 @@ $('file').onchange=async()=>{
   const notice=$('notice');notice.className='muted';notice.textContent='';
   if(file.size>(isPdf?10e6:300000)){notice.textContent=isPdf?'Use a PDF smaller than 10 MB.':'Use a resume file smaller than 300 KB.';return;}
   try{
+    const controls=['match','choosefile','sample','resume'];
+    controls.forEach(id=>$(id).disabled=true);
     if(isPdf)notice.textContent='Reading PDF…';
     const text=isPdf?await pdfText(file):await file.text();
     if(isPdf&&text.trim().length<150)throw Error('No selectable text was found. The PDF may be a scanned image.');
     $('resume').value=text;$('sample').value='';$('filename').textContent=' '+file.name;
     if(isPdf)notice.textContent='Text extracted from the PDF. Check it before matching.';
   }catch(e){notice.className='error';notice.textContent='Could not read this file. '+e.message+' Paste the resume text instead.';}
-  finally{$('file').value='';}
+  finally{$('file').value='';['match','choosefile','sample','resume'].forEach(id=>$(id).disabled=false);}
 };
 $('match').onclick=async()=>{if($('resume').value.trim().length<150){$('notice').textContent='Add a complete resume before matching.';return;}$('match').disabled=true;$('match').textContent='Finding matches…';$('notice').className='muted';$('notice').textContent='Searching job description sections and comparing five capabilities…';$('download').hidden=true;try{render(await api('/api/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({resume_text:$('resume').value,top_k:Number($('count').value),direction:'jobs'})}));}catch(e){$('notice').className='error';$('notice').textContent=e.message;}finally{$('match').disabled=false;$('match').textContent='Find matching jobs';}};
 $('latest').onclick=async()=>{try{render(await api('/api/latest'));}catch(e){$('notice').textContent=e.message;}};

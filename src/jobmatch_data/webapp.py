@@ -63,6 +63,11 @@ def make_server(index, client, port=8000, output_root=None, latest=None):
             if not self.local_request():
                 return self.reply(403, {"error": "Only same-origin local requests are accepted."})
             path = urlsplit(self.path)
+            if path.path in {
+                "/assets/resume-pdf.mjs", "/assets/pdf.min.mjs", "/assets/pdf.worker.min.mjs"
+            }:
+                asset = PAGE.parent / "assets" / path.path.rsplit("/", 1)[-1]
+                return self.reply(200, asset.read_bytes(), "text/javascript; charset=utf-8")
             hit = latest.handle_get(path.path) if latest else None
             if hit:
                 return self.reply(*hit)

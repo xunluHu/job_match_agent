@@ -44,20 +44,9 @@ async function api(path,body){
 }
 function notice(text,isError){$('notice').className=isError?'error':'muted';$('notice').textContent=text||'';}
 
-const PDFJS='https://cdn.jsdelivr.net/npm/pdfjs-dist@6.5.438/build/';
 async function pdfText(file){
-  // Loaded only when a PDF is chosen; the file is parsed in this browser and never uploaded.
-  const pdfjs=await import(PDFJS+'pdf.min.mjs').catch(()=>{throw Error('The PDF reader could not be loaded. Check your internet connection.');});
-  pdfjs.GlobalWorkerOptions.workerSrc=PDFJS+'pdf.worker.min.mjs';
-  const task=pdfjs.getDocument({data:await file.arrayBuffer()});
-  try{
-    const pdf=await task.promise,pages=[];
-    for(let n=1;n<=pdf.numPages;n++){
-      const {items}=await (await pdf.getPage(n)).getTextContent();
-      pages.push(items.map(item=>item.str+(item.hasEOL?'\n':'')).join(''));
-    }
-    return pages.join('\n\n');
-  }finally{task.destroy();}
+  const reader=await import('/assets/resume-pdf.mjs');
+  return reader.pdfText(file);
 }
 $('choosefile').onclick=()=>$('file').click();
 $('file').onchange=async()=>{

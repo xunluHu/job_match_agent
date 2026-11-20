@@ -29,6 +29,9 @@
 !/src/jobmatch_data/archive_agent.py
 !/src/jobmatch_data/agent_loop.py
 !/src/jobmatch_data/latest.html
+!/src/jobmatch_data/assets/
+!/src/jobmatch_data/assets/*.mjs
+!/src/jobmatch_data/assets/*.txt
 !/tests/
 !/tests/**
 !/eval/

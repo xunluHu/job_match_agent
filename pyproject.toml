@@ -19,4 +19,4 @@ jobmatch-data = "jobmatch_data.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-jobmatch_data = ["match.html", "latest.html"]
+jobmatch_data = ["match.html", "latest.html", "assets/*.mjs", "assets/*.txt"]
