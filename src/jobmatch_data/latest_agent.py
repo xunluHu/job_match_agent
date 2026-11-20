@@ -1,7 +1,8 @@
 """ReAct ranking agent: search and read job descriptions by id, then submit the top matches."""
 import json
 
-from .latest_rankers import TECH_ONLY, UNTRUSTED, bm25_scores, jd_excerpt, keyword_rank, result, usage_tokens
+from .agent_loop import Step, run_agent
+from .latest_rankers import TECH_ONLY, UNTRUSTED, bm25_scores, jd_excerpt, keyword_rank, result
 from .latest_rules import in_us
 
 SYSTEM = (f"You rank recent US job postings for one candidate. {UNTRUSTED} {TECH_ONLY} "
@@ -27,7 +28,6 @@ ACTION_SCHEMA = {
     },
 }
 SEARCH_LIMIT = 15
-OLD_READ_CHARS = 200
 
 
 def validate_submit(items, ids, n):
@@ -74,73 +74,38 @@ def agent_rank(pool, resume, client, n=10, max_steps=40, max_reads=30, max_token
               "- read_job(job_id): the job's description (long ones are shortened in the middle).\n"
               f"- submit(items): your final top {n}, best first.\n"
               f"Budgets: {max_steps} steps and {max_reads} read_job calls in total.\n")
-    history, trace = [], []
-    calls = input_tokens = output_tokens = reads = 0
+    def search(action, reads_left):
+        query = str(action.get("query") or "")[:300]
+        scores = bm25_scores(query, descriptions)
+        order = sorted((i for i, s in enumerate(scores) if s > 0), key=lambda i: -scores[i])[:SEARCH_LIMIT]
+        keys = list(jobs)
+        observation = "\n".join(_line(keys[i], pool[i], False) for i in order) or "No matching jobs."
+        return Step(f"search_jobs {json.dumps(query)}", observation, {"query": query})
 
-    def fall_back(reason):
-        ranked = keyword_rank(pool, resume, n)
-        return result(ranked["matches"], calls, input_tokens, output_tokens, trace, reason)
+    def read(action, reads_left):
+        job_id = action.get("job_id")
+        if job_id not in jobs:
+            message = "Unknown job id. Use an id from the catalog, like J007."
+            return Step("read_job (invalid id)", message, error=message)
+        if reads_left <= 0:
+            message = "Read budget exhausted. Rank with what you have and submit."
+            return Step(f"read_job {job_id}", message, {"job_id": job_id}, message)
+        observation = _line(job_id, jobs[job_id]) + "\n" + jd_excerpt(jobs[job_id]["description"])
+        return Step(f"read_job {job_id}", observation, {"job_id": job_id}, is_read=True)
 
-    for step in range(1, max_steps + 1):
-        rendered = []
-        for index, (header, observation, is_read) in enumerate(history):
-            if is_read and index < len(history) - 1 and len(observation) > OLD_READ_CHARS:
-                observation = observation[:OLD_READ_CHARS] + " …(truncated)"
-            rendered.append(f"{header}\nObservation: {observation}")
-        prompt = (static + "\nHISTORY:\n" + ("\n\n".join(rendered) if rendered else "(none yet)")
-                  + f"\n\nSteps left: {max_steps - step + 1}, reads left: {max(max_reads - reads, 0)}")
-        if step == max_steps:
-            prompt += "\nThis is your last step: submit now."
-        try:
-            action, metadata = client.generate(SYSTEM.format(n=n), prompt, ACTION_SCHEMA)
-        except Exception as exc:  # any client failure (HTTP, network, bad JSON) ends the run with keyword ranking
-            return fall_back(f"llm_error: {type(exc).__name__}: {exc}")
-        calls += 1
-        used_in, used_out = usage_tokens(metadata)
-        input_tokens += used_in
-        output_tokens += used_out
-        kind = action.get("action") if isinstance(action, dict) else None
-        error, is_read, args = None, False, {}
-        thought = str(action.get("thought") or "")[:500] if isinstance(action, dict) else ""
-        if kind == "search_jobs":
-            query = str(action.get("query") or "")[:300]
-            args = {"query": query}
-            scores = bm25_scores(query, descriptions)
-            order = sorted((i for i, s in enumerate(scores) if s > 0), key=lambda i: -scores[i])[:SEARCH_LIMIT]
-            keys = list(jobs)
-            observation = "\n".join(_line(keys[i], pool[i], False) for i in order) or "No matching jobs."
-            header = f"Step {step}: search_jobs {json.dumps(query)}"
-        elif kind == "read_job":
-            job_id = action.get("job_id")
-            if job_id not in jobs:
-                error = observation = "Unknown job id. Use an id from the catalog, like J007."
-                header = f"Step {step}: read_job (invalid id)"
-            elif reads >= max_reads:
-                error = observation = "Read budget exhausted. Rank with what you have and submit."
-                header = f"Step {step}: read_job {job_id}"
-                args = {"job_id": job_id}
-            else:
-                reads += 1
-                is_read = True
-                args = {"job_id": job_id}
-                observation = _line(job_id, jobs[job_id]) + "\n" + jd_excerpt(jobs[job_id]["description"])
-                header = f"Step {step}: read_job {job_id}"
-        elif kind == "submit":
-            items = action.get("items")
-            errors = validate_submit(items, ids, n)
-            args = {"items": len(items) if isinstance(items, list) else 0}
-            if not errors:
-                trace.append({"step": step, "action": kind, "args": args, "error": None, "thought": thought})
-                matches = [{"key": ids[i["job_id"]], "score": i["score"], "reason": i["reason"].strip()} for i in items]
-                return result(matches, calls, input_tokens, output_tokens, trace, None)
+    def submit(action, reads_left):
+        items = action.get("items")
+        errors = validate_submit(items, ids, n)
+        args = {"items": len(items) if isinstance(items, list) else 0}
+        if errors:
             error = "; ".join(errors)
-            observation = "Submit rejected: " + error
-            header = f"Step {step}: submit ({args['items']} items)"
-        else:
-            error = observation = "Unknown action. Use search_jobs, read_job or submit."
-            header = f"Step {step}: invalid action"
-        trace.append({"step": step, "action": kind, "args": args, "error": error, "thought": thought})
-        history.append((f"Thought: {thought}\n{header}" if thought else header, observation, is_read))
-        if input_tokens + output_tokens > max_tokens:
-            return fall_back("token_budget")
-    return fall_back("max_steps")
+            return Step(f"submit ({args['items']} items)", "Submit rejected: " + error, args, error)
+        return Step("submit", args=args, done=[{"key": ids[i["job_id"]], "score": i["score"],
+                                                "reason": i["reason"].strip()} for i in items])
+
+    matches, meta = run_agent(client, SYSTEM.format(n=n), static,
+                              {"search_jobs": search, "read_job": read, "submit": submit}, ACTION_SCHEMA,
+                              max_steps, max_reads, max_tokens)
+    if meta["fallback"]:  # an LLM error or a spent budget: rank with keywords instead
+        matches = keyword_rank(pool, resume, n)["matches"]
+    return result(matches, meta["calls"], meta["input_tokens"], meta["output_tokens"], meta["trace"], meta["fallback"])

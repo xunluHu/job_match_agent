@@ -40,7 +40,7 @@ Archive 库有 2,228 个带 JD 的职位，一次检索没命中的职位进不�
 
 ### agent 循环（新文件 `archive_agent.py`）
 
-结构照搬 `latest_agent.py`：每轮模型输出一个动作（JSON），代码执行后把结果写回历史。
+每轮模型输出一个动作（JSON），代码执行后把结果写回历史。循环本身（拼 prompt、预算、token 统计、执行记录、兜底时机）放在共用的 `agent_loop.py`，New US jobs 和 Archive 两个 agent 都用它，各自只提供工具和提交后的处理。
 
 | 动作 | 做什么 |
 |---|---|
