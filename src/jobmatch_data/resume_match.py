@@ -351,7 +351,9 @@ def run_cli(args):
         from .candidate_match import ResumeIndex, match_candidates
         result = match_candidates(resume, ResumeIndex(), client, args.top_k, args.shortlist)
     else:
-        result = match_resume(resume, JobIndex(args.database), client, args.top_k, args.shortlist)
+        from .archive_agent import agent_match  # imported here: archive_agent imports this module
+        run = agent_match if getattr(args, "method", "agent") == "agent" else match_resume
+        result = run(resume, JobIndex(args.database), client, args.top_k, args.shortlist)
     save_report(result, args.output)
     print(f"Matched {len(result['matches'])} results with {result['model']}. Report: {Path(args.output).resolve()}")
     print("Token usage:", json.dumps(result.get("usage", {})))

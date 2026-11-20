@@ -146,9 +146,11 @@ function downloadText(text,filename,type){
 }
 function retrievalDetails(retrieval){
   const detail=node('details',undefined,'retrieval');
-  detail.append(node('summary','RAG retrieval · '+retrieval.shortlist.length+' jobs shortlisted'),
-    node('p','SQLite BM25 matched '+retrieval.matched_passages.toLocaleString()+' JD passages across '+retrieval.matched_jobs.toLocaleString()+' jobs. The model scored the complete JDs on the shortlist.'),
-    node('p','Search terms · '+retrieval.query_terms.join(', '),'small'));
+  const agent=retrieval.method==='agent_bm25';
+  detail.append(node('summary',(agent?'Agent · '+retrieval.steps+' steps · ':'RAG retrieval · ')+retrieval.shortlist.length+' jobs shortlisted'),
+    agent?node('p','The agent ran '+retrieval.searches.length+' searches and read '+retrieval.reads+' job descriptions before choosing the shortlist. The model scored the complete JDs on the shortlist.')
+      :node('p','SQLite BM25 matched '+retrieval.matched_passages.toLocaleString()+' JD passages across '+retrieval.matched_jobs.toLocaleString()+' jobs. The model scored the complete JDs on the shortlist.'),
+    node('p',agent?'Agent searches · '+retrieval.searches.map(s=>s.query).join(' | '):'Search terms · '+retrieval.query_terms.join(', '),'small'));
   if(retrieval.candidate_profile){
     const profile=retrieval.candidate_profile;
     const role=profile.role_family?.replaceAll('_',' ')||'unspecified';
@@ -207,7 +209,7 @@ function recommendation(job){
   if(unknown)why.append(node('p','To verify · '+unknown,'small'));
   return why;
 }
-function render(data){report=data;$('results').replaceChildren();$('results').className='';$('notice').className='muted';$('notice').textContent=data.resume_summary+' · '+data.model+' · '+data.elapsed_seconds+'s'+(data.usage?.total_tokens?' · '+data.usage.total_tokens+' tokens':'');$('download').hidden=false;
+function render(data){report=data;$('results').replaceChildren();$('results').className='';$('notice').className='muted';$('notice').textContent=data.resume_summary+' · '+data.model+' · '+data.elapsed_seconds+'s'+(data.usage?.total_tokens?' · '+data.usage.total_tokens+' tokens':'')+(data.agent?(data.agent.fallback?' · Agent fell back to the standard search: '+data.agent.fallback:' · agent '+(data.agent.input_tokens+data.agent.output_tokens)+' tokens'):'');$('download').hidden=false;
 if(data.retrieval?.candidate_profile?.experience_timeline_evidence)$('results').append(profilePanel(data.retrieval.candidate_profile));
 if(data.retrieval)$('results').append(retrievalDetails(data.retrieval));
 else $('results').append(node('p','This report has no passage retrieval details. Restart JobMatch if it was running before the RAG update, then select Find matching jobs to generate a new report.','retrieval'));

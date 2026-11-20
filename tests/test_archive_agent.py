@@ -1,11 +1,16 @@
+import json
 import tempfile
+import threading
 import time
 import unittest
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from jobmatch_data.archive_agent import agent_match
 from jobmatch_data.resume_match import JobIndex, clean_resume, match_resume, score_shortlist
 from jobmatch_data.storage import save
+from jobmatch_data.webapp import make_server
 from tests.test_existing_regression import JOBS, RESUME, FakeMatchClient
 
 
@@ -120,6 +125,36 @@ class ArchiveAgent(ArchiveBase):
         r, client = self.run_agent([act("search_jobs", query="python"), THREE], top_k=5, shortlist=7)
         self.assertIsNone(r["agent"]["fallback"])
         self.assertIn("3 to 7", client.agent_prompts[0])
+
+
+class ArchiveWeb(ArchiveBase):
+    def call(self, client, body):
+        server = make_server(self.index, client, 0, output_root=self.root / "matches")
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        request = urllib.request.Request(f"http://127.0.0.1:{server.server_port}/api/match",
+                                         data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return response.status, json.loads(response.read())
+        except urllib.error.HTTPError as error:
+            return error.code, json.loads(error.read())
+
+    def test_web_defaults_to_agent(self):
+        status, body = self.call(Router([act("search_jobs", query="python"), THREE]), {"resume_text": RESUME, "top_k": 3})
+        self.assertEqual(status, 200)
+        self.assertTrue(body["method"].startswith("agent_bm25"))
+        self.assertEqual(body["agent"]["steps"], 2)
+
+    def test_web_pipeline_on_request(self):
+        status, body = self.call(Router([]), {"resume_text": RESUME, "top_k": 3, "method": "pipeline"})
+        self.assertEqual(status, 200)
+        self.assertTrue(body["method"].startswith("sqlite_bm25"))
+
+    def test_web_rejects_unknown_method(self):
+        status, body = self.call(Router([]), {"resume_text": RESUME, "top_k": 3, "method": "magic"})
+        self.assertEqual((status, body["error"]), (400, "Method must be agent or pipeline."))
 
 
 if __name__ == "__main__":

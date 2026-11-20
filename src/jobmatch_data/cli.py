@@ -23,6 +23,8 @@ def main():
     match.add_argument("--model")
     match.add_argument("--top-k", type=int, default=5)
     match.add_argument("--shortlist", type=int, default=7)
+    match.add_argument("--method", choices=["agent", "pipeline"], default="agent",
+                       help="agent: the model searches and shortlists (agentic RAG); pipeline: one BM25 search")
     match.add_argument("--direction", choices=["jobs", "candidates"], default="jobs",
                        help="jobs: resume to jobs; candidates: job description to resumes")
     serve = commands.add_parser("serve", help="Open a local resume-matching web app")

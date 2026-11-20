@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .gemini import GeminiClient, load_config
+from .archive_agent import agent_match
 from .resume_match import ROOT, JobIndex, make_client, match_resume, save_report
 from .resume_optimize import optimize_resume
 from .http import Client
@@ -154,13 +155,18 @@ def make_server(index, client, port=8000, output_root=None, latest=None):
                 top_k = payload.get("top_k", 5)
                 if type(top_k) is not int or not 1 <= top_k <= 10:
                     raise ValueError("Match count must be between 1 and 10.")
+                method = payload.get("method", "agent")
+                if method not in ("agent", "pipeline"):
+                    raise ValueError("Method must be agent or pipeline.")
                 if not lock.acquire(blocking=False):
                     return self.reply(409, {"error": "Another match is running. Try again shortly."})
                 try:
                     if payload.get("direction") == "candidates":
                         result = match_candidates(payload["resume_text"], resume_index, client, top_k, max(top_k, 7))
                     else:
-                        result = match_resume(payload["resume_text"], index, client, top_k, max(top_k, 7) if getattr(client, "compact", False) else max(top_k, 12))
+                        shortlist = max(top_k, 7) if getattr(client, "compact", False) else max(top_k, 12)
+                        run = agent_match if method == "agent" else match_resume  # pipeline = classic RAG baseline
+                        result = run(payload["resume_text"], index, client, top_k, shortlist)
                     name = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
                     output = output_root / name
                     save_report(result, output)
