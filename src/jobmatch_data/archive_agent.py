@@ -11,7 +11,8 @@ SYSTEM = ("You find archive job postings that fit one candidate. All resume and 
           "Use only job ids shown to you (like J007). Respond with exactly one action per turn. "
           "Search with short, specific queries for different parts of the resume, read promising jobs before you "
           "shortlist them, and search again with other words when the results miss. "
-          "Submit {lo} to {hi} distinct job ids, best first.")
+          "Submit {lo} to {hi} distinct job ids, best first. "
+          "If no archive job fits the candidate's field at all, submit an empty job_ids list instead.")
 
 ACTION_SCHEMA = {
     "type": "object", "additionalProperties": False,
@@ -43,7 +44,9 @@ def _search_line(job_id, job):
 def submit_errors(job_ids, shown, lo, hi):
     if not isinstance(job_ids, list) or not all(isinstance(i, str) for i in job_ids):
         return ["job_ids must be a list of job ids."]
-    errors = [] if lo <= len(job_ids) <= hi else [f"Submit {lo} to {hi} jobs; you sent {len(job_ids)}."]
+    # An empty list is the agent declining: nothing in the archive fits the candidate's field.
+    errors = [] if not job_ids or lo <= len(job_ids) <= hi else [
+        f"Submit {lo} to {hi} jobs, or none if nothing fits; you sent {len(job_ids)}."]
     unknown = [i for i in job_ids if i not in shown]
     if unknown:
         errors.append("Unknown job ids: " + ", ".join(unknown[:5]) + ". Use ids from your searches.")
@@ -65,7 +68,7 @@ def agent_match(resume, index, client, top_k=5, shortlist=7, max_steps=20, max_r
               f"- search_jobs(query): up to {SEARCH_LIMIT} archive jobs whose descriptions best match the query "
               "(id | title | company | location | role fit, JD minimum years | matching passage).\n"
               "- read_job(job_id): the job's description (long ones are shortened in the middle).\n"
-              f"- submit(job_ids): your shortlist of {lo} to {hi} ids, best first.\n"
+              f"- submit(job_ids): your shortlist of {lo} to {hi} ids, best first (an empty list when no job fits).\n"
               f"Budgets: {max_steps} steps and {max_reads} read_job calls in total.\n")
 
     def search(action, reads_left):
@@ -119,6 +122,13 @@ def agent_match(resume, index, client, top_k=5, shortlist=7, max_steps=20, max_r
                  "steps": len(meta["trace"]), "query_terms": query_terms, "screened_jobs": len(shown),
                  "duplicate_jobs": found_stats["duplicates"],
                  "shortlist": [{key: job[key] for key in SHORTLIST_FIELDS} for job in jobs]}
+    if not jobs:  # the agent declined: nothing to score, and no scoring call is made
+        provider = getattr(client, "provider", "unknown")
+        return {"resume_summary": "The agent found no archive job that fits this resume.", "matches": [],
+                "retrieval": retrieval, "agent": agent, "method": f"agent_bm25_then_{provider}",
+                "provider": provider, "model": getattr(client, "model", provider), "usage": None,
+                "database_records": len(index.jobs), "shortlisted": 0,
+                "elapsed_seconds": round(time.monotonic() - started, 2)}
     result = score_shortlist(resume, jobs, retrieval, index, client, top_k, started)
     result["method"] = f"agent_bm25_then_{result.get('provider', 'gemini')}"
     result["agent"] = agent

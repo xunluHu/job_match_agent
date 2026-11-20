@@ -37,7 +37,7 @@ $env:ANTHROPIC_API_KEY = Read-Host 'Anthropic API key'
 
 Open [JobMatch](http://127.0.0.1:8000). Paste a resume or upload a PDF, Markdown or text file and select **Find matching jobs**. PDF text is extracted in the browser with PDF.js, which loads from jsDelivr the first time you choose a PDF. The PDF file is not uploaded. A scanned PDF without selectable text cannot be read; paste its text instead. The app sends relevant resume excerpts and job descriptions to the configured model provider.
 
-Archive match runs as an agent (agentic RAG): the model writes its own search queries over the archive, reads job descriptions, searches again when results miss, and submits a shortlist, which is then scored with the same evidence and capability checks as before. It makes several model calls per match, so it is slower than one search. If the agent fails or runs out of its budget (20 steps, 12 reads, 150,000 tokens), the page falls back to the single BM25 search and says so. Send `"method": "pipeline"` to `/api/match`, or run `match --method pipeline`, to use the single search (the classic RAG baseline).
+Archive match runs as an agent (agentic RAG): the model writes its own search queries over the archive, reads job descriptions, searches again when results miss, and submits a shortlist (or nothing, when no job fits), which is then scored with the same evidence and capability checks as before. It makes several model calls per match, so it is slower than one search. If the agent fails or runs out of its budget (20 steps, 12 reads, 150,000 tokens), the page falls back to the single BM25 search and says so. Send `"method": "pipeline"` to `/api/match`, or run `match --method pipeline`, to use the single search (the classic RAG baseline).
 
 ## New US jobs
 
@@ -76,7 +76,7 @@ Add `--inject` to `run` to test prompt injection. For each resume, the job that 
 & $python -m jobmatch_data latest-tasks trace RESULTS.jsonl TASK_ID
 ```
 
-The agent runs 3 times per task (`--repeats`), baselines once; agents use `--model` (default `claude-haiku-5-5`) and rubric tasks are judged by `--judge-model` (default `claude-sonnet-5-5`). Results are appended as they finish, so rerunning with `--out RESULTS.jsonl` resumes. Archive tasks name jobs as `source|source_id` and cannot be unanswerable, because Archive match cannot decline yet.
+The agent runs 3 times per task (`--repeats`), baselines once; agents use `--model` (default `claude-haiku-5-5`) and rubric tasks are judged by `--judge-model` (default `claude-sonnet-5-5`). Results are appended as they finish, so rerunning with `--out RESULTS.jsonl` resumes. Archive tasks name jobs as `source|source_id`. Both agents can decline when nothing fits, so the baselines fail unanswerable tasks by design.
 
 ## Match from the command line
 

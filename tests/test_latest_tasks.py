@@ -229,13 +229,21 @@ class ArchiveTasks(unittest.TestCase):
         self.assertFalse(row["passed"])
         self.assertEqual(row["detail"], "no answer: The model returned an unknown job reference.")
 
-    def test_archive_tasks_validate_keys_and_types(self):
-        index = JobIndex(self.snap)
-        for task in (dict(self.tasks[0], expected=["test|99"]),
-                     {"id": "a09", "type": "unanswerable", "question": ARCHIVE_RESUME, "rubric": ["declines"]}):
-            self.file.write_text(json.dumps(task) + "\n", encoding="utf-8")
-            with self.assertRaises(ValueError):
-                load_archive_tasks(self.file, index)
+    def test_archive_tasks_validate_keys(self):
+        self.file.write_text(json.dumps(dict(self.tasks[0], expected=["test|99"])) + "\n", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            load_archive_tasks(self.file, JobIndex(self.snap))
+
+    def test_archive_unanswerable_agent_declines_pipeline_cannot(self):
+        chef = "## Summary\nPastry chef with eight years in hotel kitchens: laminated doughs, plated desserts. " * 3
+        self.file.write_text(json.dumps({"id": "a09", "type": "unanswerable", "question": chef,
+                                         "rubric": ["declines"]}) + "\n", encoding="utf-8")
+        tasks = load_archive_tasks(self.file, JobIndex(self.snap))
+        out = self.tmp / "chef.jsonl"
+        decline = [archive_act("search_jobs", query="pastry"), archive_act("submit", job_ids=[])]
+        run(tasks, self.snap, ["agent"], 1, Router(decline), None, out, workers=1, system="archive")
+        row = read_rows(out)[0]
+        self.assertEqual((row["passed"], row["detail"], row["calls"]), (True, "declined", 2))
 
 
 if __name__ == "__main__":

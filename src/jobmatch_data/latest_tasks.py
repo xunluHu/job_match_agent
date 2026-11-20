@@ -2,7 +2,7 @@
 
 --system latest (New US jobs): tasks.jsonl -> keyword, score_all and agent on a frozen latest-jobs snapshot.
 --system archive (Archive match): archive_tasks.jsonl -> pipeline (classic RAG) and agent on a frozen archive copy;
-job keys are "source|source_id", and archive tasks cannot be unanswerable (Archive match cannot decline yet).
+job keys are "source|source_id". Only the agents can decline, so baselines fail unanswerable tasks.
 Each run becomes one graded JSON row; `report` turns a results file into the comparison tables.
 Task types follow the lecture format:
   exact         every job in "expected" is in the top "within" results (default 10)
@@ -69,12 +69,7 @@ def load_tasks(path, db, now):
 
 def load_archive_tasks(path, index):
     keys = {archive_key(job) for job in index.jobs}
-
-    def problem(task):
-        if task.get("type") == "unanswerable":
-            return "Archive match cannot decline yet, so archive tasks cannot be unanswerable"
-        return missing_jobs(task, keys)
-    return _load(path, problem)
+    return _load(path, lambda task: missing_jobs(task, keys))
 
 
 def _load(path, system_problem):
@@ -211,8 +206,9 @@ def run_archive_task(task, method, repeat, index, pool, client, judge, meta):
     seconds = time.monotonic() - start
     agent = out.get("agent") or {}
     used_in, used_out = usage_tokens(out) if out.get("usage") else (0, 0)
+    scored = error is not None or out.get("usage") is not None  # a declining agent makes no scoring call
     ranked = result([{"key": archive_key(m), "score": m["fit_score"], "reason": m["reason"]} for m in out["matches"]],
-                    agent.get("calls", 0) + 1, agent.get("input_tokens", 0) + used_in,
+                    agent.get("calls", 0) + scored, agent.get("input_tokens", 0) + used_in,
                     agent.get("output_tokens", 0) + used_out, agent.get("trace"), agent.get("fallback"))
     if error:
         verdict = (False, f"no answer: {error}", 0)

@@ -7,7 +7,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from jobmatch_data.archive_agent import agent_match
+from jobmatch_data.archive_agent import SYSTEM, agent_match
 from jobmatch_data.resume_match import JobIndex, clean_resume, match_resume, score_shortlist
 from jobmatch_data.storage import save
 from jobmatch_data.webapp import make_server
@@ -19,6 +19,10 @@ def act(action, query="", job_id="", job_ids=()):
 
 
 THREE = act("submit", job_ids=["J001", "J002", "J003"])
+
+
+def agent_system(lo, hi):
+    return SYSTEM.format(lo=lo, hi=hi)
 
 
 class Router:
@@ -96,7 +100,7 @@ class ArchiveAgent(ArchiveBase):
                                     act("submit", job_ids=["J001"]), THREE])
         self.assertIn("Submit rejected", client.agent_prompts[2])
         self.assertIn("Unknown job ids: J999", client.agent_prompts[2])
-        self.assertIn("Submit 3 to 3 jobs; you sent 1.", client.agent_prompts[3])
+        self.assertIn("Submit 3 to 3 jobs, or none if nothing fits; you sent 1.", client.agent_prompts[3])
         self.assertIsNone(r["agent"]["fallback"])
         self.assertEqual(sum(1 for t in r["agent"]["trace"] if t["error"]), 2)
 
@@ -127,6 +131,16 @@ class ArchiveAgent(ArchiveBase):
     def test_token_budget_falls_back(self):
         r, _ = self.run_agent([act("search_jobs", query="python"), act("search_jobs", query="fastapi")], max_tokens=150)
         self.assertEqual(r["agent"]["fallback"], "token_budget")
+
+    def test_empty_submit_declines_without_scoring(self):
+        client = Router([act("search_jobs", query="pastry"), act("submit", job_ids=[])])
+        client.scorer = None  # a scoring call would fail: declining must not score anything
+        r = agent_match("Pastry chef with eight years in hotel kitchens. " * 5, self.index, client, top_k=3, shortlist=3)
+        self.assertEqual(r["matches"], [])
+        self.assertEqual((r["method"], r["agent"]["fallback"], r["agent"]["steps"]), ("agent_bm25_then_fake", None, 2))
+        self.assertEqual(r["retrieval"]["shortlist"], [])
+        self.assertIn("no archive job", r["resume_summary"].lower())
+        self.assertIn("submit an empty job_ids list", client.agent_prompts[0] + agent_system(3, 3))
 
     def test_lower_bound_capped_by_archive_size(self):
         r, client = self.run_agent([act("search_jobs", query="python"), THREE], top_k=5, shortlist=7)
