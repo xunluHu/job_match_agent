@@ -8,7 +8,7 @@ from jobmatch_data.latest_eval import snapshot
 from jobmatch_data.latest_rankers import candidate_pool
 from jobmatch_data.latest_rules import listing_rows
 from jobmatch_data.latest_store import save_jd, set_meta, sync_listings
-from jobmatch_data.latest_tasks import (STANDARD_RUBRIC, consistency, grade, load_archive_tasks, load_tasks, p95,
+from jobmatch_data.latest_tasks import (JUDGE_SCHEMA, STANDARD_RUBRIC, consistency, grade, load_archive_tasks, load_tasks, p95,
                                         read_rows, run, show_trace, summarize, to_markdown)
 from jobmatch_data.resume_match import JobIndex
 from jobmatch_data.storage import save
@@ -142,6 +142,12 @@ class LatestTasks(unittest.TestCase):
         prompt = judge.prompts[0][1]
         self.assertIn("MIDDLE_MARKER", prompt)
         self.assertIn("pay, benefits, hours, contract length, degree and seniority are not part of fit", prompt)
+
+    def test_judge_explains_before_its_verdict(self):
+        # A verdict written before its explanation sometimes contradicted it ("all reasons are grounded", yet failed).
+        item = JUDGE_SCHEMA["properties"]["verdicts"]["items"]
+        self.assertEqual(list(item["properties"]), ["number", "why", "passed"])
+        self.assertEqual(item["required"], ["number", "why", "passed"])
 
     def test_load_tasks_rejects_bad_tasks(self):
         cases = [dict(self.tasks[0], expected=["not-a-key"]), dict(self.tasks[0], type="essay"),

@@ -2,7 +2,7 @@
 import json
 
 from .agent_loop import Step, run_agent
-from .latest_rankers import TECH_ONLY, UNTRUSTED, bm25_scores, jd_excerpt, keyword_rank, result
+from .latest_rankers import GROUNDED, TECH_ONLY, UNTRUSTED, bm25_scores, jd_excerpt, keyword_rank, result
 from .latest_rules import in_us
 
 SYSTEM = (f"You rank recent US job postings for one candidate. {UNTRUSTED} {TECH_ONLY} "
@@ -10,6 +10,7 @@ SYSTEM = (f"You rank recent US job postings for one candidate. {UNTRUSTED} {TECH
           "Use search_jobs to find jobs whose descriptions match a query, and read_job to read a description "
           "before you rank a job highly. "
           "Submit exactly {n} distinct jobs, best first, each with a 0-100 score and a one-sentence reason. "
+          f"{GROUNDED} "
           "If no job in the catalog fits the candidate's field at all, submit an empty items list instead.")
 
 ACTION_SCHEMA = {
