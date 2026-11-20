@@ -134,6 +134,15 @@ class LatestTasks(unittest.TestCase):
         self.assertIn("Java first", detail)
         self.assertIn("no verdict", detail)
 
+    def test_judge_sees_whole_description_and_fit_only_rule(self):
+        long_job = dict(self.pool[0], description="A" * 2000 + " MIDDLE_MARKER " + "B" * 2000)
+        ranked = {"matches": [{"key": long_job["key"], "score": 50, "reason": "r"}], "trace": []}
+        judge = ScriptedClient([all_pass])
+        grade(self.tasks[2], ranked, [long_job], RESUME, judge)
+        prompt = judge.prompts[0][1]
+        self.assertIn("MIDDLE_MARKER", prompt)
+        self.assertIn("pay, benefits, hours, contract length, degree and seniority are not part of fit", prompt)
+
     def test_load_tasks_rejects_bad_tasks(self):
         cases = [dict(self.tasks[0], expected=["not-a-key"]), dict(self.tasks[0], type="essay"),
                  dict(self.tasks[1], expected_call={"name": "read_job", "query_any": ["x"]}),
