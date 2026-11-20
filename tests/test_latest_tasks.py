@@ -13,7 +13,7 @@ from jobmatch_data.latest_tasks import (JUDGE_SCHEMA, STANDARD_RUBRIC, consisten
 from jobmatch_data.resume_match import JobIndex
 from jobmatch_data.storage import save
 from tests.fakes import ScriptedClient, listing
-from tests.test_archive_agent import Router
+from tests.test_archive_agent import FlakyScorer, Router
 from tests.test_archive_agent import act as archive_act
 from tests.test_existing_regression import JOBS
 from tests.test_existing_regression import RESUME as ARCHIVE_RESUME
@@ -234,6 +234,15 @@ class ArchiveTasks(unittest.TestCase):
         row = read_rows(out)[0]
         self.assertFalse(row["passed"])
         self.assertEqual(row["detail"], "no answer: The model returned an unknown job reference.")
+
+    def test_retried_scoring_call_counts_as_a_turn(self):
+        tasks = load_archive_tasks(self.file, JobIndex(self.snap))[:1]
+        out = self.tmp / "retry.jsonl"
+        client = Router([])
+        client.scorer = FlakyScorer(bad=1)
+        run(tasks, self.snap, ["pipeline"], 1, client, None, out, workers=1, system="archive")
+        row = read_rows(out)[0]
+        self.assertEqual((row["passed"], row["calls"], row["input_tokens"]), (True, 2, 200))
 
     def test_archive_tasks_validate_keys(self):
         self.file.write_text(json.dumps(dict(self.tasks[0], expected=["test|99"])) + "\n", encoding="utf-8")

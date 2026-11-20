@@ -207,7 +207,8 @@ def run_archive_task(task, method, repeat, index, pool, client, judge, meta):
     seconds = time.monotonic() - start
     agent = out.get("agent") or {}
     used_in, used_out = usage_tokens(out) if out.get("usage") else (0, 0)
-    scored = error is not None or out.get("usage") is not None  # a declining agent makes no scoring call
+    # A declining agent makes no scoring call; a retried one makes two.
+    scored = out.get("scoring_calls", 1) if out.get("usage") is not None else int(error is not None)
     ranked = result([{"key": archive_key(m), "score": m["fit_score"], "reason": m["reason"]} for m in out["matches"]],
                     agent.get("calls", 0) + scored, agent.get("input_tokens", 0) + used_in,
                     agent.get("output_tokens", 0) + used_out, agent.get("trace"), agent.get("fallback"))

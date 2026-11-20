@@ -279,14 +279,26 @@ def score_shortlist(resume, jobs, retrieval, index, client, top_k, started):
                        "reported experience takes priority over skill overlap when selecting results. "
                        "An unknown year count or a title alone does not establish ineligibility.")
     prompt = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    response, metadata = client.generate(system, prompt, schema)
-    if reference_mode:
-        response = resolve_evidence_references(response, resume_entries, job_entries)
-        if len(response["matches"]) != min(top_k, len(jobs)):
-            raise ValueError("The model did not return the requested number of matches. No extra API call was made.")
-    validate_result(response, sent_resume, sent_jobs, top_k)
-    result = validate_result(response, resume, jobs, top_k)
-    result.update(metadata)
+    spent = {}
+    for attempt in (1, 2):  # a reply that fails validation gets one retry; both calls' tokens are counted
+        response, metadata = client.generate(system, prompt, schema)
+        for key, value in (metadata.get("usage") or {}).items():
+            if isinstance(value, int):
+                spent[key] = spent.get(key, 0) + value
+        try:
+            if reference_mode:
+                response = resolve_evidence_references(response, resume_entries, job_entries)
+                if len(response["matches"]) != min(top_k, len(jobs)):
+                    raise ValueError("The model did not return the requested number of matches.")
+            validate_result(response, sent_resume, sent_jobs, top_k)
+            result = validate_result(response, resume, jobs, top_k)
+            break
+        except ValueError:
+            if attempt == 2:
+                raise
+    result.update(metadata, scoring_calls=attempt)
+    if spent:
+        result["usage"] = spent
     provider = metadata.get("provider", "gemini")
     if retrieval is not None:
         result["retrieval"] = retrieval

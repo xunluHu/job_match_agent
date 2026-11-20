@@ -45,6 +45,20 @@ class Router:
         return item, {"provider": "fake", "model": "fake", "usage": {"input_tokens": 100, "output_tokens": 10}}
 
 
+class FlakyScorer(FakeMatchClient):
+    """The first `bad` replies drop one match (the wrong count); later replies are valid."""
+
+    def __init__(self, bad):
+        self.bad, self.calls = bad, 0
+
+    def generate(self, system, prompt, schema):
+        self.calls += 1
+        reply, _ = super().generate(system, prompt, schema)
+        if self.calls <= self.bad:
+            reply = dict(reply, matches=reply["matches"][:-1])
+        return reply, {"provider": "fake", "model": "fake", "usage": {"input_tokens": 100, "output_tokens": 10}}
+
+
 class ArchiveBase(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -78,6 +92,19 @@ class RetrievalAndScoring(ArchiveBase):
         self.assertEqual([m["title"] for m in result["matches"]],
                          [m["title"] for m in match_resume(RESUME, self.index, FakeMatchClient(), 3, 3)["matches"]])
         self.assertEqual(result["method"], "sqlite_bm25_parent_child_then_fake")
+
+
+    def test_invalid_scoring_reply_is_retried_once(self):
+        client = FlakyScorer(bad=1)
+        result = match_resume(RESUME, self.index, client, 3, 3)
+        self.assertEqual((client.calls, len(result["matches"]), result["scoring_calls"]), (2, 3, 2))
+        self.assertEqual(result["usage"], {"input_tokens": 200, "output_tokens": 20})  # both calls are counted
+
+    def test_second_invalid_scoring_reply_still_fails(self):
+        client = FlakyScorer(bad=2)
+        with self.assertRaisesRegex(ValueError, "requested number of matches"):
+            match_resume(RESUME, self.index, client, 3, 3)
+        self.assertEqual(client.calls, 2)
 
 
 class ArchiveAgent(ArchiveBase):
