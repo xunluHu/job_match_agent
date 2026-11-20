@@ -21,10 +21,10 @@ Team: Wenjie Hu (wenjiehu) · Fanpu Cong (fcong)
 
 **Submitted files.**
 - `tasks.jsonl`: the 50 tasks. In our repository this file is `eval/archive_tasks.jsonl`.
-- `latest_tasks.py`: the evaluation script, `src/jobmatch_data/latest_tasks.py` in our `jobmatch_data` package. One command runs both methods on every task, and runs the agent 3 times:
+- `eval_harness.py`: the evaluation script, `src/jobmatch_data/eval_harness.py` in our `jobmatch_data` package. One command runs both methods on every task, and runs the agent 3 times:
 
 ```
-python -m jobmatch_data latest-tasks run data/archive_eval/snapshots/20261120-0650.sqlite3 \
+python -m jobmatch_data eval-harness run data/archive_eval/snapshots/20261120-0650.sqlite3 \
   --system archive --tasks tasks.jsonl --provider claude --key-file KEY
 ```
 
@@ -144,7 +144,7 @@ An earlier pilot of 4 tasks had found a fourth problem, a product bug. Haiku som
 ## Failure trace: a34, agent (all 3 runs)
 
 ```
-python -m jobmatch_data latest-tasks trace data/archive_eval/tasks/week7-archive-final.jsonl a34
+python -m jobmatch_data eval-harness trace data/archive_eval/tasks/week7-archive-final.jsonl a34
 ```
 
 **In one paragraph.** Task a34 gives a long resume. The candidate's only relevant experience, UAS flight test, starts at character 6,306, after pages of coursework, and the expected posting is Aevex Aerospace's Flight Test Engineer 3. The agent failed it in all 3 runs, and the step that went wrong is its first `search_jobs`, before any posting had been read. The agent receives only the first 6,000 characters of the resume, so it never saw the flight test experience. Every search it wrote targeted coursework ("structural load calculations MATLAB…", "entry level engineering intern CAD SolidWorks…"), the Aevex posting never appeared in a result, and the shortlist it submitted held only intern roles. The scoring call, which reads the whole resume, even cited the candidate's flight test work in one reason, but it can only score what the agent shortlisted. The root cause is that the agent and the scoring call see different amounts of the resume; the fix is to give the agent the whole resume, or the experience section first.

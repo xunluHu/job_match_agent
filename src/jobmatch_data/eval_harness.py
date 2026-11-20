@@ -1,8 +1,8 @@
 """Task-based evaluation for both agents (EE P 500 week 7 eval harness).
 
---system latest (New US jobs): tasks.jsonl -> keyword, score_all and agent on a frozen latest-jobs snapshot.
---system archive (Archive match): archive_tasks.jsonl -> pipeline (classic RAG) and agent on a frozen archive copy;
-job keys are "source|source_id". Only the agents can decline, so baselines fail unanswerable tasks.
+--system latest (New US jobs): eval/tasks.jsonl -> keyword, score_all and agent on a frozen latest-jobs snapshot.
+--system archive (Archive match): eval/archive_tasks.jsonl -> pipeline (classic RAG) and agent on a frozen archive copy;
+the week 7 submission evaluates this system and ships that file as tasks.jsonl (pass it with --tasks). Job keys are "source|source_id". Only the agents can decline, so baselines fail unanswerable tasks.
 Each run becomes one graded JSON row; `report` turns a results file into the comparison tables.
 Task types follow the lecture format:
   exact         every job in "expected" is in the top "within" results (default 10)
@@ -398,7 +398,7 @@ def show_trace(rows, task_id, method="agent", repeat=0):
 
 
 def main(argv):
-    parser = argparse.ArgumentParser(prog="jobmatch_data latest-tasks", description=__doc__,
+    parser = argparse.ArgumentParser(prog="jobmatch_data eval-harness", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command", required=True)
     freeze = commands.add_parser("snapshot-archive", help="Freeze a copy of the Archive match database")

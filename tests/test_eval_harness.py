@@ -8,7 +8,7 @@ from jobmatch_data.latest_eval import snapshot
 from jobmatch_data.latest_rankers import candidate_pool
 from jobmatch_data.latest_rules import listing_rows
 from jobmatch_data.latest_store import save_jd, set_meta, sync_listings
-from jobmatch_data.latest_tasks import (JUDGE_SCHEMA, STANDARD_RUBRIC, consistency, grade, load_archive_tasks, load_tasks, p95,
+from jobmatch_data.eval_harness import (JUDGE_SCHEMA, STANDARD_RUBRIC, consistency, grade, load_archive_tasks, load_tasks, p95,
                                         read_rows, run, show_trace, summarize, to_markdown)
 from jobmatch_data.resume_match import JobIndex
 from jobmatch_data.storage import save

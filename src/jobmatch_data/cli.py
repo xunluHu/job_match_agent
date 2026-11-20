@@ -49,7 +49,7 @@ def main():
     evaluate = commands.add_parser("latest-eval", help="Evaluate New US jobs ranking methods (snapshot, run, labels, report)",
                                    add_help=False)
     evaluate.add_argument("rest", nargs=argparse.REMAINDER)
-    task_eval = commands.add_parser("latest-tasks", help="Task-based evaluation of New US jobs (run, report, trace)",
+    task_eval = commands.add_parser("eval-harness", help="Task-based evaluation of both agents (run, report, trace)",
                                     add_help=False)
     task_eval.add_argument("rest", nargs=argparse.REMAINDER)
     for command in ("stats", "export"):
@@ -79,8 +79,8 @@ def main():
         elif args.command == "latest-eval":
             from .latest_eval import main as evaluate_main
             evaluate_main(args.rest)
-        elif args.command == "latest-tasks":
-            from .latest_tasks import main as tasks_main
+        elif args.command == "eval-harness":
+            from .eval_harness import main as tasks_main
             tasks_main(args.rest)
         elif args.command == "stats":
             print(json.dumps(summarize(args.data_dir), ensure_ascii=False, indent=2))
