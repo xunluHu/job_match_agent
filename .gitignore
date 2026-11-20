@@ -25,6 +25,7 @@
 !/src/jobmatch_data/webapp.py
 !/src/jobmatch_data/latest_*.py
 !/src/jobmatch_data/claude_client.py
+!/src/jobmatch_data/archive_agent.py
 !/src/jobmatch_data/latest.html
 !/tests/
 !/tests/**

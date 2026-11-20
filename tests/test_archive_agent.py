@@ -3,9 +3,37 @@ import time
 import unittest
 from pathlib import Path
 
+from jobmatch_data.archive_agent import agent_match
 from jobmatch_data.resume_match import JobIndex, clean_resume, match_resume, score_shortlist
 from jobmatch_data.storage import save
 from tests.test_existing_regression import JOBS, RESUME, FakeMatchClient
+
+
+def act(action, query="", job_id="", job_ids=()):
+    return {"thought": "t", "action": action, "query": query, "job_id": job_id, "job_ids": list(job_ids)}
+
+
+THREE = act("submit", job_ids=["J001", "J002", "J003"])
+
+
+class Router:
+    """Agent steps come from a script; the final scoring call goes to the regression suite's fake scorer."""
+    provider = "fake"
+    compact = True
+
+    def __init__(self, script):
+        self.script = list(script)
+        self.agent_prompts = []
+        self.scorer = FakeMatchClient()
+
+    def generate(self, system, prompt, schema):
+        if "action" not in schema.get("properties", {}):
+            return self.scorer.generate(system, prompt, schema)
+        self.agent_prompts.append(prompt)
+        item = self.script.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item, {"provider": "fake", "model": "fake", "usage": {"input_tokens": 100, "output_tokens": 10}}
 
 
 class ArchiveBase(unittest.TestCase):
@@ -34,6 +62,64 @@ class RetrievalAndScoring(ArchiveBase):
         self.assertEqual([m["title"] for m in result["matches"]],
                          [m["title"] for m in match_resume(RESUME, self.index, FakeMatchClient(), 3, 3)["matches"]])
         self.assertEqual(result["method"], "sqlite_bm25_parent_child_then_fake")
+
+
+class ArchiveAgent(ArchiveBase):
+    def run_agent(self, script, **kwargs):
+        client = Router(script)
+        return agent_match(RESUME, self.index, client, **{"top_k": 3, "shortlist": 3, **kwargs}), client
+
+    def test_happy_path(self):
+        r, client = self.run_agent([act("search_jobs", query="python fastapi"), act("read_job", job_id="J001"), THREE])
+        self.assertEqual(r["method"], "agent_bm25_then_fake")
+        self.assertEqual((r["agent"]["steps"], r["agent"]["fallback"], r["agent"]["input_tokens"]), (3, None, 300))
+        self.assertEqual(r["retrieval"]["method"], "agent_bm25")
+        self.assertEqual(r["retrieval"]["searches"][0]["query"], "python fastapi")
+        self.assertEqual(len(r["matches"]), 3)
+        self.assertIn("Requirements", client.agent_prompts[2])  # the read_job observation carried the description
+        self.assertEqual(r["agent"]["trace"][0]["thought"], "t")
+
+    def test_bad_submit_is_sent_back(self):
+        r, client = self.run_agent([act("search_jobs", query="python"), act("submit", job_ids=["J999"]),
+                                    act("submit", job_ids=["J001"]), THREE])
+        self.assertIn("Submit rejected", client.agent_prompts[2])
+        self.assertIn("Unknown job ids: J999", client.agent_prompts[2])
+        self.assertIn("Submit 3 to 3 jobs; you sent 1.", client.agent_prompts[3])
+        self.assertIsNone(r["agent"]["fallback"])
+        self.assertEqual(sum(1 for t in r["agent"]["trace"] if t["error"]), 2)
+
+    def test_unknown_read_and_empty_search(self):
+        r, client = self.run_agent([act("read_job", job_id="J050"), act("search_jobs", query="zzqqxx"),
+                                    act("search_jobs", query="python"), THREE])
+        self.assertIn("Unknown job id", client.agent_prompts[1])
+        self.assertIn("No matching jobs.", client.agent_prompts[2])
+        self.assertIsNone(r["agent"]["fallback"])
+
+    def test_stable_ids(self):
+        r, client = self.run_agent([act("search_jobs", query="fastapi"), act("search_jobs", query="python"), THREE])
+        self.assertIn("J001 | Backend Engineer | Acme", client.agent_prompts[1])
+        self.assertIn("J001 | Backend Engineer | Acme", client.agent_prompts[2].split("search_jobs \"python\"")[1])
+        self.assertEqual(r["retrieval"]["screened_jobs"], 3)
+
+    def test_llm_error_falls_back(self):
+        r, _ = self.run_agent([RuntimeError("down")])
+        self.assertEqual(r["method"], "sqlite_bm25_parent_child_then_fake")
+        self.assertTrue(r["agent"]["fallback"].startswith("llm_error"))
+        self.assertEqual(len(r["matches"]), 3)
+
+    def test_step_limit_falls_back(self):
+        r, client = self.run_agent([act("search_jobs", query="python"), act("search_jobs", query="fastapi")], max_steps=2)
+        self.assertEqual(r["agent"]["fallback"], "max_steps")
+        self.assertIn("last step", client.agent_prompts[1])
+
+    def test_token_budget_falls_back(self):
+        r, _ = self.run_agent([act("search_jobs", query="python"), act("search_jobs", query="fastapi")], max_tokens=150)
+        self.assertEqual(r["agent"]["fallback"], "token_budget")
+
+    def test_lower_bound_capped_by_archive_size(self):
+        r, client = self.run_agent([act("search_jobs", query="python"), THREE], top_k=5, shortlist=7)
+        self.assertIsNone(r["agent"]["fallback"])
+        self.assertIn("3 to 7", client.agent_prompts[0])
 
 
 if __name__ == "__main__":
