@@ -1,6 +1,6 @@
 # Week 7 — An eval harness for the JobMatch Archive agent
 
-Team: _Name 1 (NetID)_ · _Name 2 (NetID)_
+Team: Wenjie Hu (wenjiehu) · Fanpu Cong (fcong)
 
 ## What we evaluate
 
