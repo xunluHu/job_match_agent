@@ -19,15 +19,18 @@ Team: Wenjie Hu (wenjiehu) · Fanpu Cong (fcong)
 
 **Models.** Both methods use `claude-haiku-5-5`. Rubric tasks are graded by `claude-sonnet-5-5`, which sees the resume and every returned posting in full.
 
-**Files.**
-- `eval/archive_tasks.jsonl`: the 50 tasks.
-- `src/jobmatch_data/latest_tasks.py`: the evaluation script. It runs both methods on every task, the agent 3 times:
+**Submitted files.**
+- `tasks.jsonl`: the 50 tasks. In our repository this file is `eval/archive_tasks.jsonl`.
+- `latest_tasks.py`: the evaluation script, `src/jobmatch_data/latest_tasks.py` in our `jobmatch_data` package. One command runs both methods on every task, and runs the agent 3 times:
 
 ```
-python -m jobmatch_data latest-tasks run data/archive_eval/snapshots/20261120-0650.sqlite3 --system archive --provider claude --key-file KEY
+python -m jobmatch_data latest-tasks run data/archive_eval/snapshots/20261120-0650.sqlite3 --system archive --tasks tasks.jsonl --provider claude --key-file KEY
 ```
 
-Results are in `data/archive_eval/tasks/week7-archive-final.jsonl`, with a summary in `week7-archive-final.md`.
+- `week7_report.md`, this report:
+  - the results table, with pass@3 and pass^3 (see Results)
+  - the failure paragraph (see Failure trace)
+- `week7-archive-final.md`: the summary the script wrote for the final run. The per-run records (`week7-archive-final.jsonl`, 1.1 MB) are available on request.
 
 ## Tasks
 
@@ -57,10 +60,10 @@ There are 5 edge cases:
 
 ## Results
 
-| method | runs | accuracy (all 50) | accuracy (no tool tasks, 42) | avg turns | avg latency (s) | p95 latency (s) | avg tokens (in / out) |
-|---|---|---|---|---|---|---|---|
-| pipeline (classic RAG) | 1 | 38% | 45% | 1.0 | 32.1 | 46.6 | 31.1k (23.1k / 8.0k) |
-| **agent (agentic RAG)** | 3 | **89%** (88% / 90% / 88%) | **87%** | 11.3 | 50.0 | 69.7 | 78.6k (68.5k / 10.1k) |
+| method | runs | accuracy (all 50) | accuracy (no tool tasks, 42) | pass@3 | pass^3 | avg turns | avg latency (s) | p95 latency (s) | avg tokens (in / out) |
+|---|---|---|---|---|---|---|---|---|---|
+| pipeline (classic RAG) | 1 | 38% | 45% | n/a (1 run) | n/a (1 run) | 1.0 | 32.1 | 46.6 | 31.1k (23.1k / 8.0k) |
+| **agent (agentic RAG)** | 3 | **89%** (88% / 90% / 88%) | **87%** | **96%** | **80%** | 11.3 | 50.0 | 69.7 | 78.6k (68.5k / 10.1k) |
 
 | task type | pipeline | agent (3 runs) |
 |---|---|---|
